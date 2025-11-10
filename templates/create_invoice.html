@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Create Invoice</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: linear-gradient(135deg, #e0f7fa, #f0f4f8);
+    margin: 0;
+    padding: 0;
+  }
+
+  .container {
+    max-width: 950px;
+    margin: 60px auto;
+    background: #fff;
+    padding: 40px 50px;
+    border-radius: 16px;
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+  }
+
+  .container:hover {
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.15);
+  }
+
+  .invoice-header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  .invoice-header img {
+    max-height: 100px;
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    color: #004d4d;
+    font-size: 26px;
+    font-weight: 700;
+  }
+
+  label {
+    font-weight: 600;
+    margin-top: 14px;
+    display: block;
+    color: #004d4d;
+  }
+
+  input,
+  textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+    transition: all 0.2s ease-in-out;
+    margin-top: 5px;
+  }
+
+  input:focus,
+  textarea:focus {
+    outline: none;
+    border-color: #008080;
+    box-shadow: 0 0 5px rgba(0, 128, 128, 0.3);
+  }
+
+  h3 {
+    color: #004d4d;
+    margin-top: 30px;
+    font-size: 18px;
+    border-left: 4px solid #008080;
+    padding-left: 10px;
+  }
+
+  /* Checkboxes */
+  .dept-options,
+  .gst-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-top: 10px;
+  }
+
+  .dept-options label,
+  .gst-options label {
+    background: #f7f9fa;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .dept-options label:hover,
+  .gst-options label:hover {
+    background: #e0f7f7;
+    border-color: #008080;
+  }
+
+  input[type="checkbox"] {
+    accent-color: #008080;
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Table */
+  table {
+    width: 100%;
+    margin-top: 25px;
+    border-collapse: collapse;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  th,
+  td {
+    text-align: center;
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+  }
+
+  th {
+    background: #008080;
+    color: #fff;
+    font-weight: 600;
+  }
+
+  tbody tr:hover {
+    background: #e6f7f7;
+  }
+
+  td input {
+    width: 95%;
+    padding: 6px;
+    border-radius: 6px;
+  }
+
+  button {
+    background: #008080;
+    color: #fff;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 6px;
+    margin-top: 15px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.3s ease;
+  }
+
+  button:hover {
+    background: #00a0a0;
+  }
+
+  .totals {
+    text-align: right;
+    margin-top: 30px;
+    font-size: 16px;
+  }
+
+  .totals p {
+    margin: 6px 0;
+  }
+
+  .totals h3 {
+    font-size: 20px;
+    color: #006666;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 25px;
+      margin: 15px;
+    }
+
+    table, th, td {
+      font-size: 14px;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 10px;
+    }
+
+    .dept-options, .gst-options {
+      flex-direction: column;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="invoice-header">
+    <img src="{{ url_for('static', filename='company_logo.jpg') }}" alt="Company Logo">
+    <h1>Create New Invoice</h1>
+  </div>
+
+  <form method="POST" id="invoiceForm">
+    <label>Invoice No:</label>
+    <input type="text" id="invoice_no" name="invoice_no" readonly>
+
+    <label>Invoice Date:</label>
+    <input type="date" id="invoice_date" name="invoice_date" readonly>
+
+    <label>Due Date:</label>
+    <input type="date" id="due_date" name="due_date" required>
+
+    <label>Client Name:</label>
+    <input type="text" name="client_name" required>
+
+    <label>Client Email:</label>
+    <input type="email" name="client_email">
+
+    <label>Client Phone:</label>
+    <input type="text" name="client_phone">
+
+    <label>Client Address:</label>
+    <textarea name="client_address"></textarea>
+
+    <label>Description / Notes:</label>
+    <textarea name="description"></textarea>
+
+    <h3>Select Department:</h3>
+    <div class="dept-options">
+      <label><input type="checkbox" name="departments" value="robotics"> Robotics</label>
+      <label><input type="checkbox" name="departments" value="it_arvr"> IT AR/VR</label>
+      <label><input type="checkbox" name="departments" value="3dprinting"> 3D Printing</label>
+    </div>
+
+    <h3>Select Tax:</h3>
+    <div class="gst-options">
+      <label><input type="checkbox" name="cgst" value="1" onchange="calculateTotals()"> CGST (9%)</label>
+      <label><input type="checkbox" name="sgst" value="1" onchange="calculateTotals()"> SGST (9%)</label>
+    </div>
+
+    <h3>Items / Services</h3>
+    <table id="itemsTable">
+      <thead>
+        <tr>
+          <th>Service/Product Name</th>
+          <th>Quantity</th>
+          <th>Unit Price</th>
+          <th>Total</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="itemsBody">
+        <tr>
+          <td><input type="text" name="service_name[]" required></td>
+          <td><input type="number" name="quantity[]" value="1" min="1" oninput="calculateTotals()" required></td>
+          <td><input type="number" name="amount[]" value="0" min="0" oninput="calculateTotals()" required></td>
+          <td class="item-total">0</td>
+          <td><button type="button" onclick="removeRow(this)">❌</button></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <button type="button" onclick="addRow()">➕ Add Item</button>
+
+    <div class="totals">
+      <p>Subtotal: rs.<span id="subtotal">0</span></p>
+      <p>GST: rs.<span id="gst">0</span></p>
+      <h3>Total: rs.<span id="final_total">0</span></h3>
+    </div>
+
+    <button type="submit">💾 Save Invoice</button>
+  </form>
+</div>
+
+<script>
+function addRow() {
+  const row = `<tr>
+    <td><input type="text" name="service_name[]" required></td>
+    <td><input type="number" name="quantity[]" value="1" min="1" oninput="calculateTotals()" required></td>
+    <td><input type="number" name="amount[]" value="0" min="0" oninput="calculateTotals()" required></td>
+    <td class="item-total">0</td>
+    <td><button type="button" onclick="removeRow(this)">❌</button></td>
+  </tr>`;
+  document.getElementById("itemsBody").insertAdjacentHTML("beforeend", row);
+}
+
+function removeRow(btn) {
+  btn.closest("tr").remove();
+  calculateTotals();
+}
+
+function calculateTotals() {
+  let subtotal = 0;
+  document.querySelectorAll("#itemsBody tr").forEach(row => {
+    const qty = parseFloat(row.querySelector('input[name="quantity[]"]').value) || 0;
+    const amt = parseFloat(row.querySelector('input[name="amount[]"]').value) || 0;
+    const total = qty * amt;
+    row.querySelector(".item-total").textContent = total.toFixed(2);
+    subtotal += total;
+  });
+
+  const cgst = document.querySelector('input[name="cgst"]').checked;
+  const sgst = document.querySelector('input[name="sgst"]').checked;
+  let gstRate = 0;
+  if (cgst && sgst) gstRate = 18;
+  else if (cgst || sgst) gstRate = 9;
+
+  const gst = subtotal * gstRate / 100;
+  const final_total = subtotal + gst;
+
+  document.getElementById("subtotal").textContent = subtotal.toFixed(2);
+  document.getElementById("gst").textContent = gst.toFixed(2);
+  document.getElementById("final_total").textContent = final_total.toFixed(2);
+}
+
+window.onload = function() {
+  const now = new Date();
+  document.getElementById("invoice_no").value = "Auto-generated by Server";
+  document.getElementById("invoice_date").value = now.toISOString().split("T")[0];
+  const due = new Date(now);
+  due.setDate(now.getDate() + 7);
+  document.getElementById("due_date").value = due.toISOString().split("T")[0];
+  calculateTotals();
+};
+</script>
+</body>
+</html>

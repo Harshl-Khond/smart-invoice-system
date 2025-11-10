@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Invoice #{{ invoice["invoice_no"] }}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f0f4f8;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 30px 40px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        h1,h2 { color: #004d4d; margin-bottom: 10px; }
+
+        /* Company Info */
+        .company-info { text-align: center; margin-bottom: 35px; }
+        .company-info img { max-height: 90px; margin-bottom: 15px; }
+        .company-info h1 { margin: 5px 0; font-size: 1.8em; }
+        .company-info p { margin: 3px 0; font-size: 0.95em; }
+
+        /* Invoice & Client Details Layout */
+        .invoice-details { margin-bottom: 25px; }
+        .invoice-details p { margin: 5px 0; font-size: 0.95em; }
+        .client-details { margin-bottom: 25px; float: right; }
+        .client-details p { margin: 5px 0; font-size: 0.95em; }
+
+        /* Section Heading for Table */
+        .section h2 {
+            background: #004d4d;
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 8px 8px 0 0;
+            margin: 0;
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 0 0 12px 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        th, td {
+            padding: 12px;
+            text-align: center;
+            border: 1px solid #ccc;
+        }
+        th { background: #007373; color: #fff; font-weight: bold; }
+        tbody tr:nth-child(even) { background: #f2f7f7; }
+        tbody tr:hover { background: #e0f7f7; transform: scale(1.01); }
+
+        /* Totals */
+        .totals {
+            text-align: right;
+            margin-top: 25px;
+            font-size: 1.1em;
+        }
+
+        /* Links */
+        a {
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 15px;
+            color: #008080;
+            font-weight: bold;
+        }
+        a:hover { color: #00b3b3; text-decoration: underline; }
+
+        @media (max-width:768px){
+            .client-details { text-align: left; float: none; }
+            table, thead, tbody, th, td, tr { display: block; }
+            th { display: none; }
+            td { text-align: right; padding-left: 50%; position: relative; }
+            td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 15px;
+                font-weight: bold;
+                text-transform: uppercase;
+                color: #555;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Company Info with Logo -->
+    <div class="company-info">
+        <img src="{{ url_for('static', filename=company['logo']) }}" alt="Company Logo">
+        <h1>{{ company['name'] }}</h1>
+        <p>{{ company['address'] }}</p>
+        <p>Email: {{ company['email'] }} | Phone: {{ company['phone'] }}</p>
+        <p>Website: {{ company['website'] }}</p>
+    </div>
+
+    <!-- Invoice Details -->
+    <div class="invoice-details">
+        <h2>Invoice Details</h2>
+        <p><b>Invoice ID:</b> {{ invoice.get("invoice_no", "N/A") }}</p>
+        <p><b>Invoice Date:</b> {{ invoice.get("invoice_date", "N/A") }}</p>
+        <p><b>Due Date:</b> {{ invoice.get("due_date", "N/A") }}</p>
+        <p><b>Description:</b> {{ invoice.get("description", "N/A") }}</p>
+    </div>
+
+    <!-- Client Details -->
+    <div class="client-details">
+        <h2>Client Details</h2>
+        <p><b>Name:</b> {{ invoice.get("client_name", "N/A") }}</p>
+        {% if invoice.get("client_email") %}<p><b>Email:</b> {{ invoice["client_email"] }}</p>{% endif %}
+        {% if invoice.get("client_phone") %}<p><b>Phone:</b> {{ invoice["client_phone"] }}</p>{% endif %}
+        {% if invoice.get("client_address") %}<p><b>Address:</b> {{ invoice["client_address"] }}</p>{% endif %}
+        <p><b>GST Applied:</b> {{ company.get("gst_type","None") }} ({{ invoice.get("gst_rate",0) }}%)</p>
+    </div>
+
+    <!-- Items Table -->
+    <div class="section">
+<!--        <h2>Items / Services</h2>-->
+        {% if invoice.get("items") %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Service/Product</th>
+                    <th>Quantity</th>
+                    <th>Unit Price (rs.)</th>
+                    <th>Total (rs.)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in invoice["items"] %}
+                <tr>
+                    <td data-label="Service/Product">{{ item["service_name"] }}</td>
+                    <td data-label="Quantity">{{ item["quantity"] }}</td>
+                    <td data-label="Unit Price">rs.{{ "%.2f"|format(item["amount"]) }}</td>
+                    <td data-label="Total">rs.{{ "%.2f"|format(item["total"]) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No items found in this invoice.</p>
+        {% endif %}
+    </div>
+
+    <!-- Totals -->
+    <div class="totals">
+        <p><b>Subtotal:</b> rs.{{ "%.2f"|format(invoice.get("subtotal",0)) }}</p>
+        <p><b>GST ({{ invoice.get("gst_rate",0) }}%):</b> rs.{{ "%.2f"|format(invoice.get("gst_amount",0)) }}</p>
+        <h3>Final Total: rs.{{ "%.2f"|format(invoice.get("final_total",0)) }}</h3>
+    </div>
+
+    <!-- Actions -->
+    <a href="{{ url_for('download_invoice_pdf', doc_id=invoice.get('id')) }}">Download PDF</a> |
+    <a href="{{ url_for('index') }}">Back</a>
+
+</div>
+</body>
+</html>
