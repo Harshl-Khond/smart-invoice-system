@@ -4,25 +4,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - KITS</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    /* Reset and Base Styling */
-    * {
-      box-sizing: border-box;
+    body, html {
+      height: 100%;
       margin: 0;
-      padding: 0;
-    }
-
-    body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       background: linear-gradient(135deg, #e8f0f2, #cdecec);
-      height: 100vh;
+    }
+
+    .login-wrapper {
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 20px;
+      height: 100%;
+      padding: 20px; /* This padding is important for mobile */
     }
 
-    /* Login Card */
     .login-container {
       background: #ffffff;
       padding: 40px 35px;
@@ -36,17 +34,15 @@
 
     .login-container:hover {
       transform: translateY(-5px);
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+<!--      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);-->
     }
 
-    /* Logo */
     .login-container img {
       width: 90px;
       margin-bottom: 18px;
       border-radius: 10px;
     }
 
-    /* Headline */
     h1 {
       color: #005b5b;
       margin-bottom: 25px;
@@ -55,7 +51,6 @@
       letter-spacing: 0.5px;
     }
 
-    /* Input Fields */
     input[type="text"], input[type="password"] {
       width: 100%;
       padding: 14px 15px;
@@ -72,7 +67,6 @@
       box-shadow: 0 0 4px rgba(0, 153, 153, 0.3);
     }
 
-    /* Button */
     button {
       width: 100%;
       padding: 14px;
@@ -91,7 +85,6 @@
       transform: scale(1.02);
     }
 
-    /* Error Message */
     .error {
       color: #d93025;
       background-color: #ffe6e6;
@@ -101,23 +94,24 @@
       font-size: 14px;
     }
 
-    /* Footer */
     .footer {
       margin-top: 20px;
       font-size: 13px;
       color: #666;
     }
 
-    /* Responsive Design */
-    @media (max-width: 480px) {
+    /* Mobile responsiveness */
+    @media (max-width: 576px) {
       .login-container {
-        padding: 30px 20px;
-        width: 100%;
-        border-radius: 14px;
+        /* These changes remove the 'card' on mobile */
+        background: transparent;
+        box-shadow: none;
+        padding: 0;
+        border-radius: 0;
       }
 
       .login-container img {
-        width: 75px;
+        width: 150px;
       }
 
       h1 {
@@ -136,23 +130,27 @@
   </style>
 </head>
 <body>
-  <div class="login-container">
-    <img src="{{ url_for('static', filename='company_logo.jpg') }}" alt="Company Logo">
-    <h1>Login</h1>
+  <div class="login-wrapper">
+    <div class="login-container">
+      <img src="{{ url_for('static', filename='company_logo.jpg') }}" alt="Company Logo">
+      <h1>Login</h1>
 
-    {% with messages = get_flashed_messages(category_filter=["error"]) %}
-      {% if messages %}
-        <div class="error">{{ messages[0] }}</div>
-      {% endif %}
-    {% endwith %}
+      {% with messages = get_flashed_messages(category_filter=["error"]) %}
+        {% if messages %}
+          <div class="error">{{ messages[0] }}</div>
+        {% endif %}
+      {% endwith %}
 
-    <form method="POST" action="{{ url_for('login') }}">
-      <input type="text" name="username" placeholder="Username" required>
-      <input type="password" name="password" placeholder="Password" required>
-      <button type="submit">Login</button>
-    </form>
+      <form method="POST" action="{{ url_for('login') }}">
+        <input type="text" name="username" placeholder="Username" required>
+        <input type="password" name="password" placeholder="Password" required>
+        <button type="submit">Login</button>
+      </form>
 
-    <div class="footer">© 2025 KITS. All rights reserved.</div>
+      <div class="footer">© 2025 KITS. All rights reserved.</div>
+    </div>
   </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
-</html>
+</html>"
