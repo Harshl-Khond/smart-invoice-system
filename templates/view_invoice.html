@@ -132,8 +132,8 @@
                 <tr>
                     <th>Service/Product</th>
                     <th>Quantity</th>
-                    <th>Unit Price (rs.)</th>
-                    <th>Total (rs.)</th>
+                    <th>Unit Price (Rs.)</th>
+                    <th>Total (Rs.)</th>
                 </tr>
             </thead>
             <tbody>
@@ -141,8 +141,8 @@
                 <tr>
                     <td data-label="Service/Product">{{ item["service_name"] }}</td>
                     <td data-label="Quantity">{{ item["quantity"] }}</td>
-                    <td data-label="Unit Price">rs.{{ "%.2f"|format(item["amount"]) }}</td>
-                    <td data-label="Total">rs.{{ "%.2f"|format(item["total"]) }}</td>
+                    <td data-label="Unit Price">Rs.{{ "%.2f"|format(item["amount"]) }}</td>
+                    <td data-label="Total">Rs.{{ "%.2f"|format(item["total"]) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -154,9 +154,9 @@
 
     <!-- Totals -->
     <div class="totals">
-        <p><b>Subtotal:</b> rs.{{ "%.2f"|format(invoice.get("subtotal",0)) }}</p>
-        <p><b>GST ({{ invoice.get("gst_rate",0) }}%):</b> rs.{{ "%.2f"|format(invoice.get("gst_amount",0)) }}</p>
-        <h3>Final Total: rs.{{ "%.2f"|format(invoice.get("final_total",0)) }}</h3>
+        <p><b>Subtotal:</b> Rs.{{ "%.2f"|format(invoice.get("subtotal",0)) }}</p>
+        <p><b>GST ({{ invoice.get("gst_rate",0) }}%):</b> Rs.{{ "%.2f"|format(invoice.get("gst_amount",0)) }}</p>
+        <h3>Final Total: Rs.{{ "%.2f"|format(invoice.get("final_total",0)) }}</h3>
     </div>
 
     <!-- Actions -->

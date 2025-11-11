@@ -6,6 +6,7 @@ import io
 import os
 import firebase_admin
 from firebase_admin import credentials, firestore
+from dotenv import load_dotenv
 
 # ------------------------
 # Firebase Initialization
@@ -21,10 +22,11 @@ app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
 # ------------------------
-# Static credentials (login)
+# Load .env file
 # ------------------------
-USERNAME = "kitstechlearning.co.in"
-PASSWORD = "kits@9876"
+load_dotenv()
+USERNAME = os.getenv("ADMIN_USERNAME")
+PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 # ------------------------
 # Routes
