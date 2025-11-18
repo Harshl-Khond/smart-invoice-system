@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Dashboard - Unique Professional</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        /* Global Reset and Font */
+        *, *::before, *::after { box-sizing: border-box; }
+        html { font-family: 'Inter', sans-serif; }
+
+        /* --- Unique Color Palette (Teal & Gold) --- */
+        :root {
+            --color-primary-dark: #004d40; /* Deep Teal - Primary Corporate Color */
+            --color-primary-light: #00695c;
+            --color-secondary-accent: #ffb300; /* Warm Gold/Amber - Accent Color */
+            --color-background-light: #f5f5f5; /* Off-White Background */
+        }
+
+        /* --- Base Styles for the Page Background (Consistent) --- */
+        body {
+            background-color: var(--color-background-light);
+            background-image: linear-gradient(180deg, #f5f5f5 50%, #eceff1 100%);
+            min-height: 100vh;
+        }
+
+        /* Card Design: Clean White, Elevated */
+        .unique-card {
+            background-color: white;
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+        }
+
+        /* Apply shadow consistently on hover */
+        .unique-card:hover {
+            box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+        }
+
+        /* Table header background color (Deep Teal) */
+        .table-header {
+            background-color: var(--color-primary-dark);
+            color: white;
+        }
+
+        /* Primary Button Style (Teal) */
+        .btn-primary {
+            background-color: var(--color-primary-light);
+            color: white;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+        .btn-primary:hover { background-color: var(--color-primary-dark); transform: scale(1.02); }
+
+        /* Accent Button Style (Gold for actions) */
+        .btn-secondary-accent {
+            background-color: var(--color-secondary-accent);
+            color: var(--color-primary-dark);
+            font-weight: 600;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+        .btn-secondary-accent:hover { background-color: #ffc133; transform: scale(1.05); }
+
+        /* Delete Button Style (Red) */
+        .btn-delete {
+            background-color: #ef4444; /* Red-500 */
+            color: white;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+        .btn-delete:hover { background-color: #dc2626; /* Red-600 */ transform: scale(1.05); }
+
+        /* Table Row Styling */
+        table tbody tr:nth-child(even) { background-color: #f9fafb; /* Light stripe */ }
+        table tbody tr:hover { background-color: #f0fdf4; /* Very light teal on hover */ }
+
+
+        /* --- MOBILE RESPONSIVENESS (LG breakpoint: 1024px) --- */
+        @media (max-width: 1023px) {
+            /* 1. Sidebar becomes full width header */
+            .sidebar-mobile-full {
+                width: 100%;
+                border-radius: 0;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+                position: static;
+                margin-bottom: 1.5rem;
+                padding: 1rem; /* Adjust padding for mobile header */
+            }
+            /* Flex layout for mobile buttons (Side-by-side) */
+            .sidebar-buttons {
+                flex-direction: row;
+                justify-content: space-around;
+                gap: 10px;
+            }
+            .sidebar-buttons .btn-primary {
+                flex: 1;
+                font-size: 0.875rem; /* text-sm */
+            }
+
+            /* 2. Main content padding adjustment */
+            .main-content-mobile {
+                padding: 1rem;
+            }
+        }
+    </style>
+
+    <script>
+        // Custom Tailwind Configuration for unique colors
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-teal': '#004d40',
+                        'primary-light': '#00695c',
+                        'accent-gold': '#ffb300',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body>
+
+<div class="flex flex-col lg:flex-row min-h-screen">
+
+    <aside class="unique-card lg:w-64 lg:h-full lg:sticky lg:top-0 space-y-6 mb-6 lg:mb-0 sidebar-mobile-full">
+
+        <h2 class="text-2xl font-extrabold text-primary-dark text-center">
+            Invoice Manager
+        </h2>
+
+        <p class="hidden lg:block text-base text-gray-700 text-center border-b pb-3 border-gray-100">
+            Welcome, <span class="text-primary-light font-semibold">{{ session.owner_name }}</span>
+        </p>
+
+        <div class="flex flex-col lg:space-y-3 sidebar-buttons">
+            <a href="{{ url_for('create_department') }}" class="btn-primary py-3 rounded-lg shadow text-center font-medium">
+                <span class="hidden lg:inline">Create Department</span>
+                <span class="lg:hidden">Add Dept</span>
+            </a>
+            <a href="{{ url_for('create_invoice') }}" class="btn-primary py-3 rounded-lg shadow text-center font-medium">
+                 <span class="hidden lg:inline">Create Invoice</span>
+                 <span class="lg:hidden">New Invoice</span>
+            </a>
+        </div>
+
+        <div class="pt-6 border-t border-gray-200 lg:pt-3">
+            <a href="/logout" class="block py-3 rounded-lg bg-gray-700 text-white text-center font-medium shadow hover:bg-gray-800">
+                Logout
+            </a>
+        </div>
+    </aside>
+
+    <main class="flex-1 p-4 sm:p-8 lg:p-12 main-content-mobile">
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
+
+            <div class="unique-card border-l-4 border-primary-light">
+                <h3 class="text-lg font-semibold text-primary-dark">Total Departments</h3>
+                <p class="text-4xl font-extrabold mt-2 text-primary-light">{{ total_departments }}</p>
+
+                <div class="mt-4 max-h-40 overflow-y-auto border border-gray-200 p-3 rounded-lg shadow-inner bg-gray-50/50">
+                    <h4 class="text-sm font-bold text-gray-700 mb-2">Department List:</h4>
+                    {% for dep in departments %}
+                        <div class="flex justify-between py-1 items-center border-b border-gray-100 last:border-0">
+                            <span class="text-sm text-gray-800 font-medium">⚫ {{ dep.department_name if dep is mapping else dep }}</span>
+
+                            <form method="POST" action="{{ url_for('delete_department', dep_id=dep.dep_id) }}"
+                                  onsubmit="return confirm('Are you sure you want to delete this department?')"
+                                  class="inline-block"
+                                  >
+                                <button class="btn-delete px-2 py-1 text-xs rounded shadow">Delete</button>
+                            </form>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="unique-card border-l-4 border-primary-light text-center flex flex-col justify-center">
+                <h3 class="text-lg font-semibold text-primary-dark">Total Invoices Generated</h3>
+                <p class="text-5xl font-extrabold mt-3 text-primary-light">{{ total_invoices }}</p>
+            </div>
+
+            <div class="unique-card border-l-4 border-accent-gold text-center flex flex-col justify-center">
+                <h3 class="text-lg font-semibold text-primary-dark">Invoices Displayed</h3>
+                <p class="text-5xl font-extrabold mt-3 text-accent-gold">{{ invoices|length }}</p>
+            </div>
+
+        </div>
+
+        <div class="unique-card mb-10 p-6">
+            <h3 class="text-xl font-bold text-primary-dark mb-4">Filter Invoices</h3>
+             <form method="GET" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                <div class="col-span-1 md:col-span-2">
+                    <label for="customer_name" class="block text-sm font-medium text-gray-700 mb-1">Customer Name:</label>
+                    <input type="text" name="customer_name" id="customer_name" placeholder="Search by Client Name"
+                           value="{{ customer_name if customer_name is defined else '' }}"
+                           class="w-full p-2 border border-gray-300 rounded-lg focus:ring-primary-light focus:border-primary-light">
+                </div>
+
+                <div>
+                    <label for="from_date" class="block text-sm font-medium text-gray-700 mb-1">From Date:</label>
+                    <input type="date" name="from_date" id="from_date" value="{{ from_date if from_date is defined else '' }}"
+                           class="w-full p-2 border border-gray-300 rounded-lg focus:ring-primary-light focus:border-primary-light">
+                </div>
+
+                <div>
+                    <label for="to_date" class="block text-sm font-medium text-gray-700 mb-1">To Date:</label>
+                    <input type="date" name="to_date" id="to_date" value="{{ to_date if to_date is defined else '' }}"
+                           class="w-full p-2 border border-gray-300 rounded-lg focus:ring-primary-light focus:border-primary-light">
+                </div>
+
+                <button type="submit" class="btn-primary py-2.5 rounded-lg shadow font-semibold">
+                    Apply Filter
+                </button>
+            </form>
+        </div>
+
+
+        <h2 class="text-2xl font-bold text-primary-dark mb-4">Invoice List</h2>
+
+        {% if invoices %}
+        <div class="unique-card overflow-x-auto shadow-inner border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="table-header text-white">
+                    <tr>
+                        <th class="p-4 text-left text-sm font-semibold uppercase tracking-wider">Invoice No</th>
+                        <th class="p-4 text-left text-sm font-semibold uppercase tracking-wider">Client Name</th>
+                        <th class="p-4 text-right text-sm font-semibold uppercase tracking-wider">Total (₹)</th>
+                        <th class="p-4 text-center text-sm font-semibold uppercase tracking-wider">Inv. Date</th>
+                        <th class="p-4 text-center text-sm font-semibold uppercase tracking-wider">Due Date</th>
+                        <th class="p-4 text-center text-sm font-semibold uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for inv in invoices %}
+                    <tr class="border-b last:border-0">
+                        <td class="px-4 py-3 text-sm font-medium text-primary-dark whitespace-nowrap">{{ inv.invoice_no }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{{ inv.client_name }}</td>
+                        <td class="px-4 py-3 text-right text-sm font-bold text-primary-light whitespace-nowrap">₹{{ "%.2f"|format(inv.final_total) }}</td>
+                        <td class="px-4 py-3 text-center text-sm text-gray-600 whitespace-nowrap">{{ inv.invoice_date }}</td>
+                        <td class="px-4 py-3 text-center text-sm font-semibold text-red-600 whitespace-nowrap">{{ inv.due_date }}</td>
+
+                        <td class="px-4 py-3 text-center space-x-1 whitespace-nowrap">
+                            <a href="{{ url_for('view_invoice', doc_id=inv.doc_id) }}"
+                               class="btn-secondary-accent px-2 py-1 text-xs rounded shadow">View</a>
+
+                            <form method="POST" action="{{ url_for('delete_invoice', doc_id=inv.doc_id) }}"
+                                  style="display:inline;"
+                                  onsubmit="return confirm('Are you sure you want to delete invoice {{ inv.invoice_no }}?')">
+                                <button class="btn-delete px-2 py-1 text-xs rounded shadow">Delete</button>
+                            </form>
+                        </td>
+
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% else %}
+            <div class="unique-card text-center p-10 text-gray-600 text-xl border-l-4 border-accent-gold">
+                <p class="font-bold">No Invoices Found.</p>
+                <p class="text-sm mt-2">Try adjusting your filters or create a new invoice.</p>
+            </div>
+        {% endif %}
+
+    </main>
+</div>
+
+</body>
+</html>

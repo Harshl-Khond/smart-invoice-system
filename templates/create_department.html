@@ -3,7 +3,7 @@
 <!--<head>-->
 <!--    <meta charset="UTF-8">-->
 <!--    <meta name="viewport" content="width=device-width, initial-scale=1.0">-->
-<!--    <title>Login</title>-->
+<!--    <title>Create Department</title>-->
 <!--    &lt;!&ndash; Load Inter font for modern typography &ndash;&gt;-->
 <!--    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">-->
 <!--    &lt;!&ndash; Load Tailwind CSS for utility-first styling and responsiveness &ndash;&gt;-->
@@ -47,35 +47,34 @@
 <!--</head>-->
 <!--<body>-->
 
-<!--&lt;!&ndash; Main container for the form: centered and responsive. Adjusted for a smaller login form size. &ndash;&gt;-->
-<!--<div class="glass-card w-full max-w-sm p-6 sm:p-8 rounded-3xl">-->
+<!--&lt;!&ndash; Main container for the form: centered and responsive &ndash;&gt;-->
+<!--<div class="glass-card w-full max-w-sm md:max-w-md p-6 sm:p-8 rounded-3xl">-->
 
-<!--    &lt;!&ndash; Title Section - Deep Indigo &ndash;&gt;-->
+<!--    &lt;!&ndash; Title Section &ndash;&gt;-->
 <!--    <h2 class="text-3xl font-extrabold text-indigo-700 text-center mb-8">-->
-<!--        Welcome Back-->
+<!--        Add New Department-->
 <!--    </h2>-->
 
 <!--    &lt;!&ndash; Form Section &ndash;&gt;-->
 <!--    <form method="POST" class="space-y-4">-->
 
-<!--        &lt;!&ndash; Input Field Styling - Focus/Border set to soft indigo &ndash;&gt;-->
-<!--        <input type="email" name="email" placeholder="Email Address" required-->
+<!--        &lt;!&ndash; Input Field Styling (consistent with other forms) &ndash;&gt;-->
+<!--        <input type="text" name="department_name" placeholder="Department Name" required-->
 <!--               class="w-full p-3 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white/50 text-gray-800 placeholder-gray-500 shadow-sm transition duration-200 hover:border-indigo-300">-->
 
-<!--        <input type="password" name="password" placeholder="Password" required-->
+<!--        <input type="text" name="sub_company_name" placeholder="Sub Company Name" required-->
 <!--               class="w-full p-3 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white/50 text-gray-800 placeholder-gray-500 shadow-sm transition duration-200 hover:border-indigo-300">-->
 
-<!--        &lt;!&ndash; Button Styling - Deep Indigo &ndash;&gt;-->
-<!--        <button type="submit" class="btn w-full mt-6 py-3 bg-indigo-600 text-white font-semibold text-lg rounded-xl shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 transform hover:scale-[1.01] active:scale-[0.99]">-->
-<!--            Login-->
+<!--        &lt;!&ndash; Button Styling &ndash;&gt;-->
+<!--        <button type="submit" class="w-full mt-4 py-3 bg-indigo-600 text-white font-semibold text-lg rounded-xl shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 transform hover:scale-[1.01] active:scale-[0.99]">-->
+<!--            Save Department-->
 <!--        </button>-->
 <!--    </form>-->
 
-<!--    &lt;!&ndash; Link Section - Deep Indigo &ndash;&gt;-->
-<!--    <div class="text-center mt-8 text-gray-600">-->
-<!--        Don't have an account?-->
-<!--        <a href="{{ url_for('register') }}" class="text-indigo-600 font-medium hover:text-indigo-800 hover:underline transition duration-200">-->
-<!--            Register-->
+<!--    &lt;!&ndash; Link Section &ndash;&gt;-->
+<!--    <div class="text-center mt-6 text-gray-600">-->
+<!--        <a href="{{ url_for('user_dashboard') }}" class="text-indigo-600 font-medium hover:text-indigo-800 hover:underline transition duration-200">-->
+<!--            Back to Dashboard-->
 <!--        </a>-->
 <!--    </div>-->
 <!--</div>-->
@@ -88,7 +87,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login to Your Account - Unique Professional</title>
+    <title>Create Department - Unique Professional</title>
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
 
@@ -107,7 +106,7 @@
             --color-background-light: #f5f5f5; /* Off-White Background */
         }
 
-        /* Body Background: Consistent Two-Tone Background */
+        /* --- Base Styles for the Page Background (Consistent) --- */
         body {
             background-color: var(--color-background-light);
             background-image: linear-gradient(180deg, #f5f5f5 50%, #eceff1 100%);
@@ -115,7 +114,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 1.5rem; /* Desktop/Tablet padding */
+            padding: 1.5rem; /* Padding for desktop/tablet edge safety */
         }
 
         /* Card Design: Clean White, Teal Top Border */
@@ -125,8 +124,8 @@
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             max-width: 100%;
-            /* Smaller max width for a cleaner login prompt */
-            max-width: 450px;
+            /* Standard max width for a focused form */
+            max-width: 500px;
             transition: all 0.3s ease;
         }
 
@@ -167,7 +166,7 @@
                 extend: {
                     colors: {
                         'primary-teal': '#004d40',
-                        'primary-light': '#00695c', /* Added for button hover */
+                        'primary-light': '#00695c',
                         'accent-gold': '#ffb300',
                     }
                 }
@@ -175,36 +174,33 @@
         }
     </script>
 </head>
-
 <body>
 
 <div class="unique-card w-full p-8 sm:p-10">
 
     <h2 class="text-3xl font-extrabold header-accent text-center mb-10">
-        Welcome Back 🤝
+        Add New Department 📝
     </h2>
 
     <form method="POST" class="space-y-6">
 
-        <input type="email" name="email" placeholder="Email Address" required
+        <input type="text" name="department_name" placeholder="Department Name" required
                class="w-full p-4 border border-gray-300 rounded-lg text-gray-800 placeholder-gray-500 shadow-sm focus:ring-0">
 
-        <input type="password" name="password" placeholder="Password" required
+        <input type="text" name="sub_company_name" placeholder="Sub Company Name (Optional)"
                class="w-full p-4 border border-gray-300 rounded-lg text-gray-800 placeholder-gray-500 shadow-sm focus:ring-0">
 
         <button type="submit"
                 class="w-full mt-6 py-4 bg-primary-teal text-white font-bold text-xl rounded-lg shadow-lg hover:bg-primary-light focus:outline-none focus:ring-4 focus:ring-primary-teal/50 transform hover:scale-[1.01] transition duration-200 ease-in-out">
-            Sign In Securely
+            Save Department
         </button>
     </form>
 
-    <div class="text-center mt-10 text-gray-600">
-        Don't have an account?
-        <a href="{{ url_for('register') }}" class="text-accent-gold font-bold hover:text-orange-600 hover:underline ml-1 transition duration-200">
-            Register Here
+    <div class="text-center mt-8 text-gray-600">
+        <a href="{{ url_for('user_dashboard') }}" class="text-accent-gold font-bold hover:text-orange-600 hover:underline ml-1 transition duration-200">
+            ← Back to Dashboard
         </a>
     </div>
-
 </div>
 
 </body>

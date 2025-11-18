@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file, flash
+from flask import Flask, render_template, request, redirect, url_for, send_file, flash,session
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from datetime import datetime, timedelta
@@ -7,6 +7,7 @@ import os
 import firebase_admin
 from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # ------------------------
 # Firebase Initialization
@@ -25,363 +26,696 @@ app.secret_key = "supersecretkey"
 # Load .env file
 # ------------------------
 load_dotenv()
-USERNAME = os.getenv("ADMIN_USERNAME")
-PASSWORD = os.getenv("ADMIN_PASSWORD")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")     # e.g. admin@gmail.com
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
-# ------------------------
-# Routes
-# ------------------------
-@app.route("/", methods=["GET", "POST"])
-def login():
-    """Simple static login."""
+
+
+@app.route("/", methods=["GET"])
+def index():
+    """Show only Register and Login options."""
+    return render_template("index.html")
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
     if request.method == "POST":
-        username = request.form.get("username")
+        owner_name = request.form.get("owner_name")
+        email = request.form.get("email").lower()
+        company_name = request.form.get("company_name")
+        company_address = request.form.get("company_address")
+        phone_no = request.form.get("phone_no")
+        company_gst = request.form.get("company_gst")
         password = request.form.get("password")
 
-        if username == USERNAME and password == PASSWORD:
-            return redirect(url_for("index"))
-        else:
-            flash("Invalid username or password!", "error")
+        # -----------------------------
+        # CHECK EMAIL ALREADY EXISTS
+        # -----------------------------
+        existing = db.collection("users").where("email", "==", email).stream()
+        if any(existing):
+            flash("Email already registered!", "error")
+            return redirect(url_for("register"))
+
+        # -----------------------------
+        # HANDLE LOGO UPLOAD → BASE64
+        # -----------------------------
+        import base64
+
+        logo_file = request.files.get("logo")
+        logo_base64 = None
+
+        if logo_file:
+            logo_base64 = base64.b64encode(logo_file.read()).decode("utf-8")
+
+        # -----------------------------
+        # SAVE USER TO FIRESTORE
+        # -----------------------------
+        db.collection("users").add({
+            "owner_name": owner_name,
+            "email": email,
+            "company_name": company_name,
+            "company_address": company_address,
+            "phone_no": phone_no,
+            "company_gst": company_gst,
+            "password": generate_password_hash(password),
+            "logo_base64": logo_base64   # <-- STORE BASE64 LOGO
+        })
+
+        flash("Registration successful! Please login.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("register.html")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+
+        email = request.form.get("email").strip().lower()
+        password = request.form.get("password").strip()
+
+
+
+        # ----------------------------------------
+        # ADMIN LOGIN CHECK
+        # ----------------------------------------
+        if email == ADMIN_EMAIL.lower() and password == ADMIN_PASSWORD:
+            session["role"] = "admin"
+            session["email"] = email
+            flash("Admin login successful!", "success")
+            return redirect(url_for("admin_dashboard"))
+
+        # ----------------------------------------
+        # USER LOGIN CHECK (FIRESTORE)
+        # ----------------------------------------
+        user_docs = db.collection("users").where("email", "==", email).stream()
+        user = None
+        for doc in user_docs:
+            user = doc.to_dict()
+            user["id"] = doc.id
+
+        if not user:
+            flash("Email not found!", "error")
             return redirect(url_for("login"))
+
+        # Check user password (hashed)
+        if not check_password_hash(user["password"], password):
+            flash("Incorrect Password!", "error")
+            return redirect(url_for("login"))
+
+        # Save user session
+        session["role"] = "user"
+        session["user_id"] = user["id"]
+        session["owner_name"] = user["owner_name"]
+
+        flash("User login successful!", "success")
+        return redirect(url_for("user_dashboard"))
 
     return render_template("login.html")
 
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("Logged out successfully!", "success")
+    return redirect(url_for("login"))
 
-@app.route("/index", methods=["GET"])
-def index():
-    """Show all invoices from Firestore."""
-    invoices_ref = db.collection("invoices").stream()
-    invoices = [doc.to_dict() | {"doc_id": doc.id} for doc in invoices_ref]
 
-    search_query = request.args.get("search", "").strip().lower()
-    if search_query:
-        invoices = [
-            inv for inv in invoices
-            if search_query in inv.get("client_name", "").lower()
-            or search_query in str(inv.get("invoice_no", "")).lower()
+@app.route("/admin/dashboard", methods=["GET"])
+def admin_dashboard():
+    if session.get("role") != "admin":
+        flash("Unauthorized Access!", "error")
+        return redirect(url_for("login"))
+
+    # Filters
+    filter_company = request.args.get("company", "").strip().lower()
+    filter_customer = request.args.get("customer", "").strip().lower()
+
+    # Fetch all users (companies)
+    user_docs = db.collection("users").stream()
+    companies = {doc.id: doc.to_dict() for doc in user_docs}
+
+    # Fetch all invoices
+    invoice_docs = db.collection("invoices").stream()
+    all_invoices = []
+
+    for doc in invoice_docs:
+        data = doc.to_dict()
+        data["doc_id"] = doc.id
+        all_invoices.append(data)
+
+    # Apply Filters
+    if filter_company:
+        all_invoices = [
+            inv for inv in all_invoices
+            if companies.get(inv.get("created_by"), {})
+                .get("company_name", "").lower().startswith(filter_company)
         ]
 
-    return render_template("index.html", invoices=invoices, search_query=search_query)
+    if filter_customer:
+        all_invoices = [
+            inv for inv in all_invoices
+            if inv.get("client_name", "").lower().startswith(filter_customer)
+        ]
+
+    # Group invoices company-wise
+    grouped_data = {}
+    for comp_id, comp in companies.items():
+        grouped_data[comp_id] = {
+            "company_name": comp.get("company_name", "(No Name)"),
+            "sub_company": comp.get("owner_name", ""),
+            "invoices": [
+                inv for inv in all_invoices if inv.get("created_by") == comp_id
+            ]
+        }
+
+    return render_template(
+        "admin_dashboard.html",
+        grouped_data=grouped_data,
+        filter_company=filter_company,
+        filter_customer=filter_customer
+    )
 
 
-# 🔹 Department short codes for invoice prefixes
-DEPARTMENT_CODES = {
-    "robotics": "ROB",
-    "it_arvr": "IT",
-    "3dprinting": "3DP"
-}
+@app.route("/user/dashboard", methods=["GET", "POST"])
+def user_dashboard():
+    if session.get("role") != "user":
+        flash("Unauthorized Access!", "error")
+        return redirect(url_for("login"))
+
+    user_id = session.get("user_id")
+
+    # -------------------------
+    # FETCH FILTER INPUTS
+    # -------------------------
+    customer_name = request.args.get("customer_name", "").strip().lower()
+    from_date = request.args.get("from_date", "")
+    to_date = request.args.get("to_date", "")
+
+    # -------------------------
+    # BASE QUERY
+    # -------------------------
+    invoice_query = db.collection("invoices").where("created_by", "==", user_id)
+
+    # -------------------------
+    # FILTER BY CUSTOMER NAME
+    # -------------------------
+    if customer_name:
+        all_docs = invoice_query.stream()
+        invoice_list = []
+        for doc in all_docs:
+            data = doc.to_dict()
+            if customer_name in data.get("client_name", "").lower():
+                data["doc_id"] = doc.id
+                invoice_list.append(data)
+    else:
+        invoice_list = []
+        for doc in invoice_query.stream():
+            data = doc.to_dict()
+            data["doc_id"] = doc.id
+            invoice_list.append(data)
+
+    # -------------------------
+    # FILTER BY DATE RANGE
+    # -------------------------
+    def date_in_range(inv_date):
+        if not inv_date:
+            return False
+
+        try:
+            dt = datetime.strptime(inv_date, "%Y-%m-%d")
+        except:
+            return False
+
+        if from_date:
+            f_dt = datetime.strptime(from_date, "%Y-%m-%d")
+            if dt < f_dt:
+                return False
+
+        if to_date:
+            t_dt = datetime.strptime(to_date, "%Y-%m-%d")
+            if dt > t_dt:
+                return False
+
+        return True
+
+    if from_date or to_date:
+        invoice_list = [inv for inv in invoice_list if date_in_range(inv.get("invoice_date"))]
+
+    # -------------------------
+    # DEPARTMENTS (WITH ID)
+    # -------------------------
+    dep_docs = db.collection("users").document(user_id).collection("departments").stream()
+
+    departments = []
+    for d in dep_docs:
+        data = d.to_dict()
+        data["dep_id"] = d.id            # IMPORTANT
+        departments.append(data)
+
+    total_departments = len(departments)
+    total_invoices = len(invoice_list)
+
+    # -------------------------
+    # RETURN PAGE
+    # -------------------------
+    return render_template(
+        "user_dashboard.html",
+        invoices=invoice_list,
+        departments=departments,  # FIXED
+        total_departments=total_departments,
+        total_invoices=total_invoices,
+        customer_name=customer_name,
+        from_date=from_date,
+        to_date=to_date
+    )
 
 
-@app.route("/create", methods=["GET", "POST"])
-def create_invoice():
-    """Create a new invoice and store it in Firestore."""
+@app.route("/create_department", methods=["GET", "POST"])
+def create_department():
+    # Ensure only logged-in users can access
+    if "user_id" not in session:
+        flash("Please login first!", "error")
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+
     if request.method == "POST":
-        client_name = request.form["client_name"]
-        client_email = request.form.get("client_email", "")
-        client_phone = request.form.get("client_phone", "")
-        client_address = request.form.get("client_address", "")
-        description = request.form.get("description", "")
-        invoice_date = request.form.get("invoice_date", datetime.now().strftime("%Y-%m-%d"))
-        due_date = request.form.get("due_date", (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"))
+        department_name = request.form.get("department_name")
+        sub_company_name = request.form.get("sub_company_name")
 
-        # ✅ Get selected departments
-        selected_departments = request.form.getlist("departments")
-        if not selected_departments:
-            flash("Please select at least one department.", "danger")
-            return redirect(url_for("create_invoice"))
+        # Save department inside user's department collection
+        db.collection("users").document(user_id).collection("departments").add({
+            "department_name": department_name,
+            "sub_company_name": sub_company_name,
+            "created_at": datetime.now(),
+            "created_by": user_id
+        })
 
-        # ✅ Generate Invoice ID
-        first_dept = selected_departments[0]
-        dept_code = DEPARTMENT_CODES.get(first_dept, "GEN")
-        invoices = db.collection("invoices").where("department_code", "==", dept_code).stream()
-        count = sum(1 for _ in invoices)
-        next_number = str(count + 1).zfill(3)
-        invoice_no = f"KITS-{dept_code}-{next_number}"
+        flash("Department Created Successfully!", "success")
+        return redirect(url_for("user_dashboard"))
 
-        # Collect items
-        service_names = request.form.getlist("service_name[]")
+    return render_template("create_department.html")
+
+
+
+
+
+@app.route("/create_invoice", methods=["GET", "POST"])
+def create_invoice():
+    if "user_id" not in session:
+        flash("Please login first!", "error")
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+
+    # ------------------------- POST (SAVE INVOICE) -------------------------
+    if request.method == "POST":
+        invoice_number = request.form.get("invoice_no")
+        invoice_date = request.form.get("invoice_date")
+        due_date = request.form.get("due_date")
+
+        client_name = request.form.get("client_name")
+        client_email = request.form.get("client_email")
+        client_phone = request.form.get("client_phone")
+        client_address = request.form.get("client_address")
+
+        departments = request.form.getlist("departments")
+        taxes = request.form.getlist("taxes")
+        notes = request.form.get("notes")
+
+        item_names = request.form.getlist("item_name[]")
         quantities = request.form.getlist("quantity[]")
-        amounts = request.form.getlist("amount[]")
-        items = []
-        subtotal = 0
-        for s, q, a in zip(service_names, quantities, amounts):
-            try:
-                q = int(q)
-                a = float(a)
-                total = q * a
-                items.append({
-                    "service_name": s,
-                    "quantity": q,
-                    "amount": a,
-                    "total": total
-                })
-                subtotal += total
-            except ValueError:
-                continue
+        unit_prices = request.form.getlist("unit_price[]")
+        totals = request.form.getlist("total[]")
 
-        # ✅ GST Calculation based on checkboxes
-        cgst = request.form.get("cgst")
-        sgst = request.form.get("sgst")
-        gst_rate = 0
-        if cgst and sgst:
-            gst_rate = 18
-        elif cgst or sgst:
-            gst_rate = 9
+        line_items = []
+        for i in range(len(item_names)):
+            line_items.append({
+                "item_name": item_names[i],
+                "quantity": int(quantities[i]),
+                "unit_price": float(unit_prices[i]),
+                "total": float(totals[i])
+            })
 
-        gst_amount = round((subtotal * gst_rate) / 100, 2)
-        final_total = round(subtotal + gst_amount, 2)
+        subtotal = float(request.form.get("subtotal"))
+        gst_amount = float(request.form.get("gst_amount"))
+        final_total = float(request.form.get("final_total"))
 
-        invoice_data = {
-            "invoice_no": invoice_no,
+        db.collection("invoices").add({
+            "invoice_no": invoice_number,
+            "invoice_date": invoice_date,
+            "due_date": due_date,
             "client_name": client_name,
             "client_email": client_email,
             "client_phone": client_phone,
             "client_address": client_address,
-            "description": description,
-            "invoice_date": invoice_date,
-            "due_date": due_date,
-            "items": items,
+            "departments": departments,
+            "taxes": taxes,
+            "notes": notes,
+            "items": line_items,
             "subtotal": subtotal,
-            "gst_rate": gst_rate,
             "gst_amount": gst_amount,
             "final_total": final_total,
-            "created_at": datetime.now().isoformat(),
-            "departments": selected_departments,
-            "department_code": dept_code
-        }
+            "created_by": user_id,
+            "created_at": datetime.now()
+        })
 
-        # Store in Firestore
-        doc_ref = db.collection("invoices").add(invoice_data)
-        doc_id = doc_ref[1].id
+        flash("Invoice Created Successfully!", "success")
+        return redirect(url_for("user_dashboard"))
 
-        flash(f"Invoice {invoice_no} created successfully!", "success")
-        return redirect(url_for("view_invoice", doc_id=doc_id))
+    # ------------------------- GET (LOAD PAGE) -------------------------
 
-    return render_template("create_invoice.html")
+    dep_docs = db.collection("users").document(user_id).collection("departments").stream()
+    dynamic_departments = [doc.to_dict().get("department_name") for doc in dep_docs]
+
+    # When loading page, invoice_no is blank → user must select department first
+    return render_template(
+        "create_invoice.html",
+        departments=dynamic_departments,
+        invoice_no=""
+    )
 
 
+@app.route("/generate_invoice_no", methods=["POST"])
+def generate_invoice_no():
+    if "user_id" not in session:
+        return {"error": "Unauthorized"}, 401
 
-@app.route("/invoice/<string:doc_id>")
+    user_id = session["user_id"]
+    data = request.get_json()
+    selected_dep = data.get("department")
+
+    if not selected_dep:
+        return {"error": "No department selected"}, 400
+
+    # Fetch user details
+    user_data = db.collection("users").document(user_id).get().to_dict()
+    company_name = user_data.get("company_name", "")
+    company_prefix = company_name.replace(" ", "")[:3].upper()
+
+    # Department prefix
+    dep_prefix = selected_dep.replace(" ", "")[:3].upper()
+
+    # Fetch all invoices for this user
+    invoice_docs = db.collection("invoices") \
+        .where("created_by", "==", user_id) \
+        .stream()
+
+    last_serial = 0
+
+    for doc in invoice_docs:
+        inv = doc.to_dict()
+        if selected_dep in inv.get("departments", []):
+            try:
+                serial = int(inv["invoice_no"][-3:])
+                if serial > last_serial:
+                    last_serial = serial
+            except:
+                pass
+
+    new_serial = str(last_serial + 1).zfill(3)
+
+    invoice_no = f"{company_prefix}-{dep_prefix}-{new_serial}"
+
+    return {"invoice_no": invoice_no}, 200
+
+
+@app.route("/invoice/<doc_id>")
 def view_invoice(doc_id):
-    """View a single invoice from Firestore with full company and customer details."""
-    doc_ref = db.collection("invoices").document(doc_id).get()
-    if not doc_ref.exists:
-        return "Invoice not found", 404
+    # Fetch invoice
+    doc = db.collection("invoices").document(doc_id).get()
+    if not doc.exists:
+        flash("Invoice not found!", "error")
+        return redirect(url_for("user_dashboard"))
 
-    invoice = doc_ref.to_dict()
-    invoice["id"] = doc_id
+    invoice = doc.to_dict()
+    invoice["doc_id"] = doc.id
 
-    # Determine company name based on selected department
-    dept_names = invoice.get("departments", [])
-    company_name = "KAJAL INNOVATION AND TECHNICAL SOLUTIONS"
-    if "it_arvr" in dept_names:
-        company_name = "KITS Software Solution Pvt Ltd"
-    elif "robotics" in dept_names:
-        company_name = "KITS Robotics and Automation Pvt Ltd"
-    elif "3dprinting" in dept_names:
-        company_name = "KITS 3D Printing Pvt Ltd"
+    # Ensure items list exists
+    if "items" not in invoice or not isinstance(invoice["items"], list):
+        invoice["items"] = []
 
-    # Determine GST type applied
-    gst_type = "None"
-    if invoice.get("gst_rate", 0) == 18:
-        gst_type = "CGST + SGST"
-    elif invoice.get("gst_rate", 0) == 9:
-        gst_type = "CGST or SGST"
+    # Fetch logged-in user details (company info)
+    user_id = invoice.get("created_by")
+    user_doc = db.collection("users").document(user_id).get()
 
-    company_info = {
-        "name": company_name,
-        "address": "KITS, 1st floor, Mukta Plaza, KITS Square, Income tax chowk, AKOLA",
-        "email": "info@kitstechlearning.co.in",
-        "phone": "9226983129 / 7385582242",
-        "website": "www.kitstechlearning.co.in",
-        "logo": "company_logo.jpg",
-        "gst_type": gst_type
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+    else:
+        user_data = {}
+
+    # ---------------------------
+    # DETERMINE SUB-COMPANY
+    # ---------------------------
+    selected_departments = invoice.get("departments", [])
+    sub_company_name = None
+
+    dep_docs = db.collection("users").document(user_id).collection("departments").stream()
+    for dep in dep_docs:
+        dep_data = dep.to_dict()
+        if dep_data.get("department_name") in selected_departments:
+            sub_company_name = dep_data.get("sub_company_name")
+            break
+
+    # If no sub-company → fallback to main company
+    final_company_name = (
+        sub_company_name if sub_company_name else user_data.get("company_name", "Company")
+    )
+
+    # ---------------------------
+    # PREPARE COMPANY INFO
+    # ---------------------------
+    company = {
+        "company_name": final_company_name,
+        "owner_name": user_data.get("owner_name", ""),
+        "address": user_data.get("company_address", ""),
+        "gst_no": user_data.get("company_gst", ""),
+        "email": user_data.get("email", ""),
+        "phone_no": user_data.get("phone_no", "Not Provided")
     }
 
-    return render_template("view_invoice.html", invoice=invoice, company=company_info)
+    return render_template("view_invoice.html", invoice=invoice, company=company)
 
-
-@app.route("/delete/<doc_id>", methods=["POST"])
+@app.route("/delete_invoice/<string:doc_id>", methods=["POST"])
 def delete_invoice(doc_id):
+    if "user_id" not in session:
+        flash("Please login first!", "error")
+        return redirect(url_for("login"))
+
     try:
-        # Reference to the document
-        invoice_ref = db.collection("invoices").document(doc_id)
+        db.collection("invoices").document(doc_id).delete()
+        flash("Invoice deleted successfully!", "success")
+    except:
+        flash("Failed to delete invoice!", "error")
 
-        # Check if it exists before deleting
-        if invoice_ref.get().exists:
-            invoice_ref.delete()
-            flash("✅ Invoice deleted successfully!", "success")
-        else:
-            flash("⚠️ Invoice not found in Firestore.", "warning")
+    return redirect(url_for("user_dashboard"))
 
-    except Exception as e:
-        flash(f"❌ Error deleting invoice: {e}", "error")
+@app.route("/delete_department/<string:dep_id>", methods=["POST"])
+def delete_department(dep_id):
+    if "user_id" not in session:
+        flash("Please login first!", "error")
+        return redirect(url_for("login"))
 
-    return redirect(url_for("index"))
+    user_id = session["user_id"]
 
+    try:
+        db.collection("users").document(user_id).collection("departments").document(dep_id).delete()
+        flash("Department deleted successfully!", "success")
+    except:
+        flash("Failed to delete department!", "error")
+
+    return redirect(url_for("user_dashboard"))
 
 
 @app.route("/invoice/<string:doc_id>/download_pdf")
 def download_invoice_pdf(doc_id):
-    """Generate dynamic PDF invoice with logo watermark (behind content) from Firestore."""
+    """Generate PDF invoice WITH company logo centered + watermark (NO other changes)."""
+
     from reportlab.platypus import Table, TableStyle
     from reportlab.lib import colors
     from reportlab.lib.units import inch
+    from reportlab.lib.utils import ImageReader
+    import base64
 
-    # 🔹 Fetch invoice from Firestore
+    # ------- AUTO WRAP FUNCTION (ONLY NEW ADDITION) -------
+    def wrap_text(canvas, text, x, y, max_width, line_height=14):
+        words = text.split()
+        line = ""
+        for word in words:
+            test = f"{line} {word}".strip()
+            if canvas.stringWidth(test, "Helvetica", 11) <= max_width:
+                line = test
+            else:
+                canvas.drawString(x, y, line)
+                y -= line_height
+                line = word
+        if line:
+            canvas.drawString(x, y, line)
+        return y
+
+    # -------- Fetch Invoice --------
     doc_ref = db.collection("invoices").document(doc_id).get()
     if not doc_ref.exists:
         return "Invoice not found", 404
 
     invoice = doc_ref.to_dict()
 
-    # Create PDF in memory
+    # -------- Fetch User / Company Info --------
+    user_id = invoice.get("created_by")
+    user_doc = db.collection("users").document(user_id).get()
+
+    user = user_doc.to_dict() if user_doc.exists else {}
+
+    company_address = user.get("company_address", "")
+    company_gst = user.get("company_gst", "")
+    company_email = user.get("email", "")
+    company_phone = user.get("phone_no", "")
+    owner_name = user.get("owner_name", "")
+
+    # GET BASE64 LOGO
+    logo_base64 = user.get("logo_base64")
+
+    # -------- Detect Sub-Company --------
+    selected_departments = invoice.get("departments", [])
+    sub_company_name = None
+
+    dep_docs = db.collection("users").document(user_id).collection("departments").stream()
+    for dep in dep_docs:
+        dep_data = dep.to_dict()
+        if dep_data.get("department_name") in selected_departments:
+            sub_company_name = dep_data.get("sub_company_name")
+            break
+
+    company_name = sub_company_name if sub_company_name else user.get("company_name")
+
+    # -------- Prepare PDF Canvas --------
     pdf_buffer = io.BytesIO()
     c = canvas.Canvas(pdf_buffer, pagesize=A4)
     width, height = A4
 
-    # 🔹 Company details
-    departments = invoice.get("departments", [])
-    company_name = "KITS Innovation and Technical Solutions Pvt Ltd"
-    if "it_arvr" in departments:
-        company_name = "KITS Software Solution Pvt Ltd"
-    elif "robotics" in departments:
-        company_name = "KITS Robotics and Automation Pvt Ltd"
-    elif "3dprinting" in departments:
-        company_name = "KITS 3D Printing Pvt Ltd"
+    # ------------------------------------------------------
+    # ADD LOGO WATERMARK (FADED BEHIND EVERYTHING)
+    # ------------------------------------------------------
+    if logo_base64:
+        try:
+            logo_data = base64.b64decode(logo_base64)
+            logo_img = ImageReader(io.BytesIO(logo_data))
 
-    company_address = "KITS, 1st Floor, Mukta Plaza, KITS Square, Income Tax Chowk, Akola"
-    company_email = "info@kitstechlearning.co.in"
-    company_phone = "9226983129 / 7385582242"
-    company_website = "www.kitstechlearning.co.in"
-    company_logo_path = os.path.join("static", "company_logo.jpg")
+            c.saveState()
+            c.setFillAlpha(0.08)
+            c.drawImage(
+                logo_img,
+                (width - 300) / 2,
+                (height - 300) / 2,
+                width=300,
+                height=300,
+                mask='auto'
+            )
+            c.restoreState()
+        except:
+            pass
 
-    # 🔹 Add faded background logo watermark
-    if os.path.exists(company_logo_path):
-        watermark_w, watermark_h = 300, 300
-        c.saveState()
-        c.setFillAlpha(0.08)  # Transparency for watermark (0.0 = fully transparent, 1.0 = solid)
-        c.drawImage(
-            company_logo_path,
-            (width - watermark_w) / 2,
-            (height - watermark_h) / 2,
-            width=watermark_w,
-            height=watermark_h,
-            mask="auto"
-        )
-        c.restoreState()
+    # ------------------------------------------------------
+    # ADD LOGO ABOVE COMPANY NAME (CENTERED)
+    # ------------------------------------------------------
+    if logo_base64:
+        try:
+            logo_data = base64.b64decode(logo_base64)
+            logo_img = ImageReader(io.BytesIO(logo_data))
 
-    # 🔹 Company Logo (top)
-    if os.path.exists(company_logo_path):
-        logo_w, logo_h = 100, 100
-        c.drawImage(company_logo_path, (width - logo_w) / 2, height - 130, width=logo_w, height=logo_h, mask="auto")
+            c.drawImage(
+                logo_img,
+                width / 2 - 40,
+                height - 100,
+                width=80,
+                height=80,
+                mask='auto'
+            )
+        except:
+            pass
 
-    # Header
+    # ------------------------------------------------------
+    # ORIGINAL LAYOUT (UNTOUCHED)
+    # ------------------------------------------------------
     c.setFont("Helvetica-Bold", 18)
-    c.setFillColorRGB(0.0, 0.3, 0.3)
-    c.drawCentredString(width / 2, height - 150, company_name)
     c.setFillColorRGB(0, 0, 0)
-    c.setFont("Helvetica", 10)
-    c.drawCentredString(width / 2, height - 165, company_address)
-    c.drawCentredString(width / 2, height - 180, f"Email: {company_email} | Phone: {company_phone}")
-    c.drawCentredString(width / 2, height - 195, f"Website: {company_website}")
+    c.drawCentredString(width / 2, height - 120, company_name)
 
-    # Invoice + Client Info
-    y_pos = height - 230
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(80, y_pos, "Invoice Details:")
     c.setFont("Helvetica", 11)
-    c.drawString(80, y_pos - 20, f"Invoice ID: {invoice.get('invoice_no', 'N/A')}")
-    c.drawString(80, y_pos - 35, f"Invoice Date: {invoice.get('invoice_date', 'N/A')}")
-    c.drawString(80, y_pos - 50, f"Due Date: {invoice.get('due_date', 'N/A')}")
-    c.drawString(80, y_pos - 65, f"Description: {invoice.get('description', 'N/A')}")
+    c.drawCentredString(width / 2, height - 135, company_address)
+    c.drawCentredString(width / 2, height - 150, f"Email: {company_email} | Phone: {company_phone}")
+
+    # ---------------- INVOICE & CUSTOMER DETAILS ----------------
+    y = height - 235
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(60, y, "Invoice Details:")
+
+    c.setFont("Helvetica", 11)
+    c.drawString(60, y - 20, f"Invoice No: {invoice.get('invoice_no')}")
+    c.drawString(60, y - 35, f"Invoice Date: {invoice.get('invoice_date')}")
+    c.drawString(60, y - 50, f"Due Date: {invoice.get('due_date')}")
+    c.drawString(60, y - 65, f"GSTIN: {company_gst}")
 
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(360, y_pos - 75, "Client Details:")
+    c.drawString(390, y - 60, "Customer Details:")
+
     c.setFont("Helvetica", 11)
-    c.drawString(360, y_pos - 95, f"Name: {invoice.get('client_name', 'N/A')}")
-    c.drawString(360, y_pos - 110, f"Email: {invoice.get('client_email', 'N/A')}")
-    c.drawString(360, y_pos - 125, f"Phone: {invoice.get('client_phone', 'N/A')}")
-    c.drawString(360, y_pos - 140, f"Address: {invoice.get('client_address', 'N/A')}")
+    c.drawString(390, y - 75, f"Name: {invoice.get('client_name')}")
+    c.drawString(390, y - 90, f"Email: {invoice.get('client_email')}")
+    c.drawString(390, y - 105, f"Phone: {invoice.get('client_phone')}")
 
+    # ----------- RESPONSIVE MULTILINE ADDRESS (ONLY CHANGE) -----------
+    customer_address = f"Address: {invoice.get('client_address')}"
+    wrap_text(c, customer_address, 390, y - 120, max_width=160)
 
-    # Table Data
-    data = [["Service/Product", "Qty", "Unit Price (Rs.)", "Total (Rs.)"]]
+    # ---------------- TABLE ----------------
+    data = [["Item/Service", "Qty", "Unit Price (Rs.)", "Total (Rs.)"]]
+
     for item in invoice.get("items", []):
         data.append([
-            item.get("service_name", ""),
+            item.get("item_name", ""),
             str(item.get("quantity", "")),
-            f"Rs.{item.get('amount', 0):.2f}",
-            f"Rs.{item.get('total', 0):.2f}",
+            f"{item.get('unit_price', 0):.2f}",
+            f"{item.get('total', 0):.2f}"
         ])
 
-    # Table styling
-    table = Table(data, colWidths=[220, 80, 100, 100])
+    table = Table(data, colWidths=[220, 70, 120, 120])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
     ]))
 
-    # Dynamically position table (avoid overlap)
-    y_table = height - 420
-    available_height = y_table - 150
-    row_height = 18
-    table_height = len(data) * row_height
+    y_table = y - 160
+    table_height = len(data) * 20
 
-    if table_height > available_height:
-        # Handle large tables: split across pages
-        chunk_size = int(available_height // row_height)
-        for start in range(0, len(data), chunk_size):
-            chunk = data[start:start + chunk_size]
-            t = Table(chunk, colWidths=[220, 80, 100, 100])
-            t.setStyle(table._argW)
-            t.wrapOn(c, width, height)
-            t.drawOn(c, 50, y_table - (row_height * len(chunk)))
-            c.showPage()
+    if y_table - table_height < 100:
+        c.showPage()
+        y_table = height - 100
 
-            # Add watermark (logo) again on new page background
-            if os.path.exists(company_logo_path):
-                c.saveState()
-                c.setFillAlpha(0.08)
-                c.drawImage(
-                    company_logo_path,
-                    (width - watermark_w) / 2,
-                    (height - watermark_h) / 2,
-                    width=watermark_w,
-                    height=watermark_h,
-                    mask="auto"
-                )
-                c.restoreState()
-    else:
-        table.wrapOn(c, width, height)
-        table.drawOn(c, 50, y_table - table_height)
+    table.wrapOn(c, width, height)
+    table.drawOn(c, 40, y_table - table_height)
 
-    # Totals Section (below table)
-    y_total = y_table - table_height - 40
+    # ---------------- TOTALS ----------------
+    y_tot = y_table - table_height - 40
+
     c.setFont("Helvetica", 11)
-    c.drawRightString(450, y_total, "Subtotal:")
-    c.drawRightString(550, y_total, f"Rs.{invoice.get('subtotal', 0):.2f}")
-    c.drawRightString(450, y_total - 15, f"GST ({invoice.get('gst_rate', 0)}%):")
-    c.drawRightString(550, y_total - 15, f"Rs.{invoice.get('gst_amount', 0):.2f}")
+    c.drawRightString(450, y_tot, "Subtotal:")
+    c.drawRightString(550, y_tot, f"Rs.{invoice.get('subtotal', 0):.2f}")
+
+    c.drawRightString(450, y_tot - 18, "GST:")
+    c.drawRightString(550, y_tot - 18, f"Rs.{invoice.get('gst_amount', 0):.2f}")
+
     c.setFont("Helvetica-Bold", 12)
-    c.drawRightString(450, y_total - 35, "Final Total:")
-    c.drawRightString(550, y_total - 35, f"Rs.{invoice.get('final_total', 0):.2f}")
+    c.drawRightString(450, y_tot - 38, "Final Total:")
+    c.drawRightString(550, y_tot - 38, f"Rs.{invoice.get('final_total', 0):.2f}")
 
-    # Signature
-    y_sign = y_total - 80
+    # ---------------- SIGNATURE ----------------
     c.setFont("Helvetica-Oblique", 11)
-    c.drawRightString(525, y_sign, "Signature And Stamp")
-    c.drawRightString(525, y_sign - 15, "Mis. Kajal Rajvaidya")
-    c.drawRightString(530, y_sign - 30, "(CEO & Founder)")
-    c.drawRightString(525, y_sign - 70, "--------------------")
+    c.drawRightString(550, y_tot - 85, "Signature & Stamp")
+    c.drawRightString(550, y_tot - 100, owner_name)
 
-    # Footer
     c.setFont("Helvetica-Oblique", 9)
-    c.setFillColorRGB(0.4, 0.4, 0.4)
     c.drawCentredString(width / 2, 40, "Thank you for your business!")
 
     c.save()
@@ -390,7 +724,7 @@ def download_invoice_pdf(doc_id):
     return send_file(
         pdf_buffer,
         as_attachment=True,
-        download_name=f"invoice_{invoice.get('invoice_no', 'invoice')}.pdf",
+        download_name=f"{invoice.get('invoice_no')}.pdf",
         mimetype="application/pdf"
     )
 
@@ -398,4 +732,5 @@ def download_invoice_pdf(doc_id):
 # Run App
 # ------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
+
