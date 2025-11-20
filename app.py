@@ -493,6 +493,81 @@ def view_invoice(doc_id):
     }
 
     return render_template("view_invoice.html", invoice=invoice, company=company)
+@app.route("/invoice/<string:doc_id>/edit", methods=["GET", "POST"])
+def edit_invoice(doc_id):
+    if "user_id" not in session:
+        flash("Please login first!", "error")
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+
+    doc_ref = db.collection("invoices").document(doc_id)
+    invoice_doc = doc_ref.get()
+
+    if not invoice_doc.exists:
+        flash("Invoice not found!", "error")
+        return redirect(url_for("user_dashboard"))
+
+    old_invoice = invoice_doc.to_dict()
+
+    # ---------------- POST: SAVE UPDATED DATA ----------------
+    if request.method == "POST":
+
+        updated_data = {
+            "invoice_no": request.form.get("invoice_no"),
+            "invoice_date": request.form.get("invoice_date"),
+            "due_date": request.form.get("due_date"),
+
+            "client_name": request.form.get("client_name"),
+            "client_email": request.form.get("client_email"),
+            "client_phone": request.form.get("client_phone"),
+            "client_address": request.form.get("client_address"),
+
+            "departments": request.form.getlist("departments"),
+            "taxes": request.form.getlist("taxes"),
+            "notes": request.form.get("notes"),
+
+            "subtotal": float(request.form.get("subtotal")),
+            "gst_amount": float(request.form.get("gst_amount")),
+            "final_total": float(request.form.get("final_total")),
+            "updated_at": datetime.now()
+        }
+
+        # ---------------- LINE ITEMS ----------------
+        item_names = request.form.getlist("item_name[]")
+        quantities = request.form.getlist("quantity[]")
+        unit_prices = request.form.getlist("unit_price[]")
+        totals = request.form.getlist("total[]")
+
+        line_items = []
+        for i in range(len(item_names)):
+            line_items.append({
+                "item_name": item_names[i],
+                "quantity": int(quantities[i]),
+                "unit_price": float(unit_prices[i]),
+                "total": float(totals[i])
+            })
+
+        updated_data["items"] = line_items
+
+        doc_ref.update(updated_data)
+
+        flash("Invoice Updated Successfully!", "success")
+        return redirect(url_for("user_dashboard"))
+
+    # ---------------- GET REQUEST ----------------
+    # Fetch departments
+    dep_docs = db.collection("users").document(user_id).collection("departments").stream()
+    dynamic_departments = [d.to_dict().get("department_name") for d in dep_docs]
+
+    return render_template(
+        "edit_invoice.html",
+        invoice=old_invoice,
+        doc_id=doc_id,
+        departments=dynamic_departments
+    )
+
+
 
 @app.route("/delete_invoice/<string:doc_id>", methods=["POST"])
 def delete_invoice(doc_id):
@@ -523,6 +598,7 @@ def delete_department(dep_id):
         flash("Failed to delete department!", "error")
 
     return redirect(url_for("user_dashboard"))
+
 
 
 @app.route("/invoice/<string:doc_id>/download_pdf")

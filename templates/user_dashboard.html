@@ -248,6 +248,10 @@
                         <td class="px-4 py-3 text-center space-x-1 whitespace-nowrap">
                             <a href="{{ url_for('view_invoice', doc_id=inv.doc_id) }}"
                                class="btn-secondary-accent px-2 py-1 text-xs rounded shadow">View</a>
+                            <a href="{{ url_for('edit_invoice', doc_id=inv.doc_id) }}"
+   class="px-3 py-1.5 text-xs rounded-lg bg-primary-light text-white shadow hover:bg-primary-dark">
+    Edit
+</a>
 
                             <form method="POST" action="{{ url_for('delete_invoice', doc_id=inv.doc_id) }}"
                                   style="display:inline;"
