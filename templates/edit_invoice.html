@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Invoice - Unique Professional</title>
+    <title>Edit Invoice</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -47,15 +47,11 @@
         }
 
         .table-header { background-color: var(--color-primary-dark); }
-        .btn-primary { background-color: var(--color-primary-light); }
-        .btn-primary:hover { background-color: var(--color-primary-dark); }
-
         .btn-accent {
             background-color: var(--color-secondary-accent);
             color: var(--color-primary-dark);
             font-weight: 600;
         }
-        .btn-accent:hover { background-color: #ffc133; }
     </style>
 </head>
 
@@ -67,7 +63,6 @@
         <h1 class="text-3xl font-extrabold header-accent mb-2">Edit Invoice ✏️</h1>
     </div>
 
-    <!-- ========================== FORM ========================== -->
     <form method="POST" action="{{ url_for('edit_invoice', doc_id=doc_id) }}" class="space-y-6">
 
         <!-- ========================== TOP SECTION ========================== -->
@@ -92,64 +87,72 @@
                 <h2 class="text-xl font-semibold header-accent border-b pb-2">Client Information</h2>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <input type="text" name="client_name" value="{{ invoice['client_name'] }}" class="form-input">
-                    <input type="email" name="client_email" value="{{ invoice['client_email'] }}" class="form-input">
-                    <input type="text" name="client_phone" value="{{ invoice['client_phone'] }}" class="form-input">
+
+                    <input type="text"
+                           name="client_name"
+                           value="{{ invoice['client_name'] }}"
+                           placeholder="Client Name"
+                           class="form-input">
+
+                    <input type="email"
+                           name="client_email"
+                           value="{{ invoice['client_email'] }}"
+                           placeholder="Client Email"
+                           class="form-input">
+
+                    <input type="text"
+                           name="client_phone"
+                           value="{{ invoice['client_po'] }}"
+                           placeholder="Client Purchase Order"
+                           class="form-input">
                 </div>
 
-                <textarea name="client_address" rows="3" class="form-textarea">{{ invoice['client_address'] }}</textarea>
+                <textarea name="client_address"
+                          rows="3"
+                          class="form-textarea"
+                          placeholder="Client Full Address">{{ invoice['client_address'] }}</textarea>
             </div>
         </div>
 
         <!-- ========================== SECOND SECTION ========================== -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-            <!-- Left: Department, Notes, Taxes -->
+            <!-- Left Section -->
             <div class="unique-card p-6 space-y-6 lg:col-span-2">
 
-                <!-- Department Select -->
                 <div>
                     <h2 class="text-xl font-semibold header-accent border-b pb-2">Select Department</h2>
-
                     <div class="flex flex-wrap gap-4 mt-4">
                         {% for dep in departments %}
-                            <label class="flex items-center space-x-2 p-3 rounded-lg border border-gray-200 cursor-pointer bg-gray-50 hover:bg-teal-50">
-                                <input type="radio" name="departments"
-                                       value="{{ dep }}"
-                                       {% if dep in invoice['departments'] %}checked{% endif %}>
-                                <span class="text-sm font-medium">{{ dep }}</span>
-                            </label>
+                        <label class="flex items-center space-x-2 p-3 rounded-lg border border-gray-200 cursor-pointer bg-gray-50 hover:bg-teal-50">
+                            <input type="radio" name="departments" value="{{ dep }}"
+                                   {% if dep in invoice['departments'] %}checked{% endif %}>
+                            <span class="text-sm font-medium">{{ dep }}</span>
+                        </label>
                         {% endfor %}
                     </div>
                 </div>
 
-                <!-- Notes -->
                 <div>
                     <h2 class="text-xl font-semibold header-accent border-b pb-2">Notes</h2>
                     <textarea name="notes" rows="3" class="form-textarea">{{ invoice['notes'] }}</textarea>
                 </div>
 
-                <!-- Taxes -->
                 <div>
                     <h2 class="text-xl font-semibold header-accent border-b pb-2">Tax Selection</h2>
                     <div class="flex space-x-6 mt-3">
-
                         <label class="flex items-center space-x-2">
-                            <input type="checkbox" name="taxes" value="cgst"
-                                {% if 'cgst' in invoice['taxes'] %}checked{% endif %}
-                                onclick="calculateTotals()">
+                            <input type="checkbox" name="taxes" value="cgst" {% if 'cgst' in invoice['taxes'] %}checked{% endif %}>
                             <span>CGST (9%)</span>
                         </label>
 
                         <label class="flex items-center space-x-2">
-                            <input type="checkbox" name="taxes" value="sgst"
-                                {% if 'sgst' in invoice['taxes'] %}checked{% endif %}
-                                onclick="calculateTotals()">
+                            <input type="checkbox" name="taxes" value="sgst" {% if 'sgst' in invoice['taxes'] %}checked{% endif %}>
                             <span>SGST (9%)</span>
                         </label>
-
                     </div>
                 </div>
+
             </div>
 
             <!-- Totals -->
@@ -167,7 +170,7 @@
             </div>
         </div>
 
-        <!-- ========================== ITEMS TABLE ========================== -->
+        <!-- ========================== ITEMS ========================== -->
         <div class="unique-card p-6">
             <h2 class="text-xl font-semibold header-accent border-b pb-4">Items / Services</h2>
 
@@ -176,23 +179,37 @@
                     <thead>
                         <tr>
                             <th class="table-header p-3 text-left text-white">Item/Service</th>
-                            <th class="table-header p-3 text-center text-white w-20">Qty</th>
-                            <th class="table-header p-3 text-center text-white w-32">Unit Price</th>
-                            <th class="table-header p-3 text-center text-white w-32">Total</th>
-                            <th class="table-header p-3 text-center text-white w-10">❌</th>
+                            <th class="table-header p-3 text-center text-white">Qty</th>
+                            <th class="table-header p-3 text-center text-white">Unit Price</th>
+                            <th class="table-header p-3 text-center text-white">Total</th>
+                            <th class="table-header p-3 text-center text-white">❌</th>
                         </tr>
                     </thead>
 
                     <tbody>
-                    {% for item in invoice['items'] %}
-                    <tr>
-                        <td class="p-3"><input type="text" name="item_name[]" value="{{ item['item_name'] }}"></td>
-                        <td class="p-3"><input type="number" name="quantity[]" value="{{ item['quantity'] }}" oninput="calculateTotals()"></td>
-                        <td class="p-3"><input type="number" name="unit_price[]" value="{{ item['unit_price'] }}" oninput="calculateTotals()"></td>
-                        <td class="p-3"><input type="text" name="total[]" value="{{ item['total'] }}" readonly></td>
-                        <td class="p-3 text-center"><button type="button" onclick="removeRow(this)" class="text-red-600">❌</button></td>
-                    </tr>
-                    {% endfor %}
+                        {% for item in invoice['items'] %}
+                        <tr>
+                            <td class="p-3">
+                                <input type="text" name="item_name[]" value="{{ item['item_name'] }}" placeholder="Item Name" class="form-input">
+                            </td>
+
+                            <td class="p-3">
+                                <input type="number" name="quantity[]" value="{{ item['quantity'] }}" oninput="calculateTotals()" class="form-input">
+                            </td>
+
+                            <td class="p-3">
+                                <input type="number" name="unit_price[]" value="{{ item['unit_price'] }}" oninput="calculateTotals()" class="form-input">
+                            </td>
+
+                            <td class="p-3">
+                                <input type="text" name="total[]" value="{{ item['total'] }}" readonly class="form-input">
+                            </td>
+
+                            <td class="p-3 text-center">
+                                <button type="button" onclick="removeRow(this)" class="text-red-600">❌</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
                     </tbody>
                 </table>
             </div>
@@ -202,31 +219,29 @@
             </button>
         </div>
 
-       <button type="submit"
-        style="width:100%; padding:16px; background:#00695c; color:white;
-               border-radius:12px; font-size:22px; font-weight:700;
-               box-shadow:0 4px 12px rgba(0,0,0,0.2);">
-    💾 Update Invoice
-</button>
-
+        <button type="submit"
+                style="width:100%; padding:16px; background:#00695c; color:white;
+                       border-radius:12px; font-size:22px; font-weight:700;
+                       box-shadow:0 4px 12px rgba(0,0,0,0.2);">
+            💾 Update Invoice
+        </button>
 
     </form>
 </div>
 
-
-<!-- ========================== JS ========================== -->
 <script>
 function addItem() {
-    const table = document.querySelector("#items_table tbody");
+    let table = document.querySelector("#items_table tbody");
+    let row = document.createElement("tr");
 
-    const row = document.createElement("tr");
     row.innerHTML = `
-        <td class="p-3"><input type="text" name="item_name[]" placeholder="Item"></td>
-        <td class="p-3"><input type="number" name="quantity[]" value="1" oninput="calculateTotals()"></td>
-        <td class="p-3"><input type="number" name="unit_price[]" value="0" oninput="calculateTotals()"></td>
-        <td class="p-3"><input type="text" name="total[]" value="0" readonly></td>
+        <td class="p-3"><input type="text" name="item_name[]" placeholder="Item Name" class="form-input"></td>
+        <td class="p-3"><input type="number" name="quantity[]" value="1" oninput="calculateTotals()" class="form-input"></td>
+        <td class="p-3"><input type="number" name="unit_price[]" value="0" oninput="calculateTotals()" class="form-input"></td>
+        <td class="p-3"><input type="text" name="total[]" value="0" readonly class="form-input"></td>
         <td class="p-3 text-center"><button type="button" onclick="removeRow(this)" class="text-red-600">❌</button></td>
     `;
+
     table.appendChild(row);
     calculateTotals();
 }
@@ -240,20 +255,21 @@ function calculateTotals() {
     let subtotal = 0;
 
     document.querySelectorAll("#items_table tbody tr").forEach(row => {
-        const qty = parseFloat(row.querySelector('[name="quantity[]"]').value) || 0;
-        const price = parseFloat(row.querySelector('[name="unit_price[]"]').value) || 0;
-        const total = qty * price;
+        let qty = parseFloat(row.querySelector('[name="quantity[]"]').value) || 0;
+        let price = parseFloat(row.querySelector('[name="unit_price[]"]').value) || 0;
+        let total = qty * price;
 
         row.querySelector('[name="total[]"]').value = total.toFixed(2);
         subtotal += total;
     });
 
     let gst_rate = 0;
+
     if (document.querySelector('input[value="cgst"]')?.checked) gst_rate += 9;
     if (document.querySelector('input[value="sgst"]')?.checked) gst_rate += 9;
 
-    const gst_amount = subtotal * gst_rate / 100;
-    const final_total = subtotal + gst_amount;
+    let gst_amount = (subtotal * gst_rate) / 100;
+    let final_total = subtotal + gst_amount;
 
     document.getElementById("subtotal").value = subtotal.toFixed(2);
     document.getElementById("gst_amount").value = gst_amount.toFixed(2);

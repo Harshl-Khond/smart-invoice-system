@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Users</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-dark': '#004d40',
+                        'primary-light': '#00695c',
+                        'accent-gold': '#ffb300',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #f5f5f5;
+            background-image: linear-gradient(180deg, #f5f5f5 50%, #eceff1 100%);
+            min-height: 100vh;
+            padding: 20px;
+            font-family: 'Inter', sans-serif;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+        }
+        .header-accent { color: #004d40; }
+    </style>
+
+    <script>
+        function toggleForm(id) {
+            let formDiv = document.getElementById("form_" + id);
+            formDiv.classList.toggle("hidden");
+        }
+    </script>
+</head>
+
+<body>
+
+<div class="max-w-6xl mx-auto">
+
+    <h1 class="text-4xl font-extrabold header-accent text-center mb-8">
+        All Registered Users
+    </h1>
+
+    <div class="card">
+        <table class="min-w-full border border-gray-200 rounded-lg overflow-hidden">
+            <thead>
+                <tr class="bg-primary-light text-white">
+                    <th class="p-3 text-left">Owner Name</th>
+                    <th class="p-3 text-left">Email</th>
+                    <th class="p-3 text-left">Company</th>
+                    <th class="p-3 text-left">Address</th>
+                    <th class="p-3 text-left">Phone</th>
+                    <th class="p-3 text-left">GST</th>
+                    <th class="p-3 text-center">Action</th>
+                </tr>
+            </thead>
+
+            <tbody class="divide-y divide-gray-200">
+                {% for u in users %}
+                <tr class="hover:bg-gray-50">
+                    <td class="p-3">{{ u.owner_name }}</td>
+                    <td class="p-3">{{ u.email }}</td>
+                    <td class="p-3">{{ u.company_name }}</td>
+                    <td class="p-3">{{ u.company_address }}</td>
+                    <td class="p-3">{{ u.phone_no }}</td>
+                    <td class="p-3">{{ u.company_gst }}</td>
+
+                    <td class="p-3 text-center">
+                        <button onclick="toggleForm('{{u.user_id}}')"
+                                class="bg-primary-dark text-white py-2 px-4 rounded-lg shadow-md hover:bg-primary-light">
+                            Update
+                        </button>
+                    </td>
+                </tr>
+
+                <!-- HIDDEN UPDATE FORM (TOGGLE) -->
+                <tr id="form_{{u.user_id}}" class="hidden bg-gray-50">
+                    <td colspan="7" class="p-5">
+
+                        <form action="{{ url_for('admin_update_user', user_id=u.user_id) }}"
+                              method="POST" enctype="multipart/form-data"
+                              class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-6 rounded-lg shadow">
+
+                            <h2 class="col-span-2 text-xl font-bold text-primary-dark mb-2">
+                                Update User Profile
+                            </h2>
+
+                            <input type="text" name="owner_name" value="{{u.owner_name}}"
+                                   class="p-3 border rounded-lg" placeholder="Owner Name" required>
+
+                            <input type="email" name="email" value="{{u.email}}"
+                                   class="p-3 border rounded-lg" placeholder="Email" required>
+
+                            <input type="text" name="company_name" value="{{u.company_name}}"
+                                   class="p-3 border rounded-lg" placeholder="Company Name" required>
+
+                            <textarea name="company_address" class="p-3 border rounded-lg" required>{{u.company_address}}</textarea>
+
+                            <input type="text" name="phone_no" value="{{u.phone_no}}"
+                                   class="p-3 border rounded-lg" placeholder="Phone" required>
+
+                            <input type="text" name="company_gst" value="{{u.company_gst}}"
+                                   class="p-3 border rounded-lg" placeholder="GST No" required>
+
+                            <div class="col-span-2">
+                                <label class="font-semibold text-primary-dark">Update Logo (Optional)</label>
+                                <input type="file" name="logo" accept="image/*"
+                                       class="p-3 border rounded-lg w-full">
+                            </div>
+
+                            <div class="col-span-2 text-right">
+                                <button class="bg-primary-dark text-white py-3 px-6 rounded-lg shadow-md hover:bg-primary-light">
+                                    Save Changes
+                                </button>
+                            </div>
+
+                        </form>
+
+                    </td>
+                </tr>
+
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="text-center mt-8">
+        <a href="{{ url_for('admin_dashboard') }}"
+           class="bg-primary-dark text-white py-3 px-6 rounded-lg shadow-md hover:bg-primary-light">
+            ⬅ Back to Dashboard
+        </a>
+    </div>
+
+</div>
+
+</body>
+</html>

@@ -136,6 +136,13 @@
     <h1 class="text-4xl font-extrabold header-accent text-center pt-4">
         Admin Dashboard
     </h1>
+<div class="text-center">
+    <a href="{{ url_for('admin_users') }}"
+       class="inline-block bg-primary-teal text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-primary-light transition">
+        View All Users
+    </a>
+</div>
+
 
     <div class="unique-card filter-box">
         <form method="GET" class="flex flex-wrap items-center justify-center gap-4">

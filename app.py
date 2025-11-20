@@ -193,6 +193,63 @@ def admin_dashboard():
         filter_customer=filter_customer
     )
 
+@app.route("/admin/users")
+def admin_users():
+    if session.get("role") != "admin":
+        flash("Unauthorized Access!", "error")
+        return redirect(url_for("login"))
+
+    # Fetch all users
+    user_docs = db.collection("users").stream()
+    users = []
+    for doc in user_docs:
+        data = doc.to_dict()
+        data["user_id"] = doc.id
+        users.append(data)
+
+    return render_template("admin_users.html", users=users)
+
+
+@app.route("/admin/update_user/<string:user_id>", methods=["POST"])
+def admin_update_user(user_id):
+    if session.get("role") != "admin":
+        flash("Unauthorized Access!", "error")
+        return redirect(url_for("login"))
+
+    # Get updated fields
+    owner_name = request.form.get("owner_name")
+    email = request.form.get("email")
+    company_name = request.form.get("company_name")
+    company_address = request.form.get("company_address")
+    phone_no = request.form.get("phone_no")
+    company_gst = request.form.get("company_gst")
+
+    # Handle logo upload
+    import base64
+    logo_file = request.files.get("logo")
+    logo_base64 = None
+
+    if logo_file and logo_file.filename != "":
+        logo_base64 = base64.b64encode(logo_file.read()).decode("utf-8")
+
+    update_data = {
+        "owner_name": owner_name,
+        "email": email,
+        "company_name": company_name,
+        "company_address": company_address,
+        "phone_no": phone_no,
+        "company_gst": company_gst,
+    }
+
+    # update only if new logo uploaded
+    if logo_base64:
+        update_data["logo_base64"] = logo_base64
+
+    db.collection("users").document(user_id).update(update_data)
+
+    flash("User profile updated successfully!", "success")
+    return redirect(url_for("admin_users"))
+
 
 @app.route("/user/dashboard", methods=["GET", "POST"])
 def user_dashboard():
@@ -334,7 +391,7 @@ def create_invoice():
 
         client_name = request.form.get("client_name")
         client_email = request.form.get("client_email")
-        client_phone = request.form.get("client_phone")
+        client_po = request.form.get("client_po")
         client_address = request.form.get("client_address")
 
         departments = request.form.getlist("departments")
@@ -365,7 +422,7 @@ def create_invoice():
             "due_date": due_date,
             "client_name": client_name,
             "client_email": client_email,
-            "client_phone": client_phone,
+            "client_po": client_po,
             "client_address": client_address,
             "departments": departments,
             "taxes": taxes,
@@ -520,7 +577,7 @@ def edit_invoice(doc_id):
 
             "client_name": request.form.get("client_name"),
             "client_email": request.form.get("client_email"),
-            "client_phone": request.form.get("client_phone"),
+            "client_po": request.form.get("client_po"),
             "client_address": request.form.get("client_address"),
 
             "departments": request.form.getlist("departments"),
@@ -601,129 +658,131 @@ def delete_department(dep_id):
 
 
 
+
 @app.route("/invoice/<string:doc_id>/download_pdf")
 def download_invoice_pdf(doc_id):
-    """Generate PDF invoice WITH company logo centered + watermark (NO other changes)."""
-
     from reportlab.platypus import Table, TableStyle
     from reportlab.lib import colors
-    from reportlab.lib.units import inch
     from reportlab.lib.utils import ImageReader
     import base64
 
-    # ------- AUTO WRAP FUNCTION (ONLY NEW ADDITION) -------
-    def wrap_text(canvas, text, x, y, max_width, line_height=14):
+    # ---------- GENERIC WRAP ----------
+    def wrap_text(canvas_obj, text, x, y, max_width, font="Helvetica", font_size=11, line_height=14, center=False):
+        canvas_obj.setFont(font, font_size)
         words = text.split()
         line = ""
         for word in words:
-            test = f"{line} {word}".strip()
-            if canvas.stringWidth(test, "Helvetica", 11) <= max_width:
+            test = (line + " " + word).strip()
+            if canvas_obj.stringWidth(test, font, font_size) <= max_width:
                 line = test
             else:
-                canvas.drawString(x, y, line)
+                if center:
+                    canvas_obj.drawCentredString(x, y, line)
+                else:
+                    canvas_obj.drawString(x, y, line)
                 y -= line_height
                 line = word
+
         if line:
-            canvas.drawString(x, y, line)
+            if center:
+                canvas_obj.drawCentredString(x, y, line)
+            else:
+                canvas_obj.drawString(x, y, line)
         return y
 
-    # -------- Fetch Invoice --------
+    # ---------- FETCH ----------
     doc_ref = db.collection("invoices").document(doc_id).get()
     if not doc_ref.exists:
         return "Invoice not found", 404
 
     invoice = doc_ref.to_dict()
-
-    # -------- Fetch User / Company Info --------
     user_id = invoice.get("created_by")
-    user_doc = db.collection("users").document(user_id).get()
+    user = db.collection("users").document(user_id).get().to_dict()
 
-    user = user_doc.to_dict() if user_doc.exists else {}
-
+    company_name = user.get("company_name", "")
     company_address = user.get("company_address", "")
-    company_gst = user.get("company_gst", "")
     company_email = user.get("email", "")
     company_phone = user.get("phone_no", "")
     owner_name = user.get("owner_name", "")
-
-    # GET BASE64 LOGO
+    company_gst = user.get("company_gst", "")
     logo_base64 = user.get("logo_base64")
 
-    # -------- Detect Sub-Company --------
-    selected_departments = invoice.get("departments", [])
-    sub_company_name = None
-
-    dep_docs = db.collection("users").document(user_id).collection("departments").stream()
-    for dep in dep_docs:
-        dep_data = dep.to_dict()
-        if dep_data.get("department_name") in selected_departments:
-            sub_company_name = dep_data.get("sub_company_name")
-            break
-
-    company_name = sub_company_name if sub_company_name else user.get("company_name")
-
-    # -------- Prepare PDF Canvas --------
+    # ---------- PDF SETUP ----------
     pdf_buffer = io.BytesIO()
     c = canvas.Canvas(pdf_buffer, pagesize=A4)
     width, height = A4
 
-    # ------------------------------------------------------
-    # ADD LOGO WATERMARK (FADED BEHIND EVERYTHING)
-    # ------------------------------------------------------
+    # -----------------------------------------------------
+    #  WATERMARK (slightly darker now) — NO DARK BOX
+    # -----------------------------------------------------
     if logo_base64:
         try:
-            logo_data = base64.b64decode(logo_base64)
-            logo_img = ImageReader(io.BytesIO(logo_data))
+            img = ImageReader(io.BytesIO(base64.b64decode(logo_base64)))
 
             c.saveState()
-            c.setFillAlpha(0.08)
+            c.setFillAlpha(0.06)  # slightly darker than 0.03
             c.drawImage(
-                logo_img,
-                (width - 300) / 2,
-                (height - 300) / 2,
-                width=300,
-                height=300,
-                mask='auto'
+                img,
+                (width - 280) / 2,
+                (height - 280) / 2,
+                width=280,
+                height=280,
+                mask="auto"
             )
             c.restoreState()
         except:
             pass
 
-    # ------------------------------------------------------
-    # ADD LOGO ABOVE COMPANY NAME (CENTERED)
-    # ------------------------------------------------------
+    # -----------------------------------------------------
+    # LOGO ON TOP
+    # -----------------------------------------------------
     if logo_base64:
         try:
-            logo_data = base64.b64decode(logo_base64)
-            logo_img = ImageReader(io.BytesIO(logo_data))
-
             c.drawImage(
-                logo_img,
+                ImageReader(io.BytesIO(base64.b64decode(logo_base64))),
                 width / 2 - 40,
-                height - 100,
+                height - 110,
                 width=80,
                 height=80,
-                mask='auto'
+                preserveAspectRatio=True,
+                mask="auto"
             )
         except:
             pass
 
-    # ------------------------------------------------------
-    # ORIGINAL LAYOUT (UNTOUCHED)
-    # ------------------------------------------------------
-    c.setFont("Helvetica-Bold", 18)
-    c.setFillColorRGB(0, 0, 0)
-    c.drawCentredString(width / 2, height - 120, company_name)
+    # ---------- RESPONSIVE COMPANY NAME ----------
+    y_name = height - 145
+    y_name = wrap_text(
+        c,
+        company_name,
+        width / 2,
+        y_name,
+        max_width=350,
+        font="Helvetica-Bold",
+        font_size=18,
+        center=True,
+        line_height=22
+    )
 
-    c.setFont("Helvetica", 11)
-    c.drawCentredString(width / 2, height - 135, company_address)
-    c.drawCentredString(width / 2, height - 150, f"Email: {company_email} | Phone: {company_phone}")
+    # ---------- COMPANY ADDRESS WRAP ----------
+    y_name = wrap_text(
+        c,
+        company_address,
+        width / 2,
+        y_name - 15,
+        max_width=380,
+        font="Helvetica",
+        font_size=11,
+        center=True
+    )
 
-    # ---------------- INVOICE & CUSTOMER DETAILS ----------------
-    y = height - 235
+    c.drawCentredString(width / 2, y_name - 15, f"Email: {company_email} | Phone: {company_phone}")
+
+    # ---------- INVOICE DETAILS ----------
+    y = height - 240
+
     c.setFont("Helvetica-Bold", 12)
     c.drawString(60, y, "Invoice Details:")
-
     c.setFont("Helvetica", 11)
     c.drawString(60, y - 20, f"Invoice No: {invoice.get('invoice_no')}")
     c.drawString(60, y - 35, f"Invoice Date: {invoice.get('invoice_date')}")
@@ -733,22 +792,56 @@ def download_invoice_pdf(doc_id):
     c.setFont("Helvetica-Bold", 12)
     c.drawString(390, y - 60, "Customer Details:")
 
+    # ---------------------------------------------------------
+    #  ✔ NEW: WRAPPED CLIENT NAME (Fix requested by you)
+    # ---------------------------------------------------------
+    # ---------------------------------------------------------
+    # WRAP CLIENT NAME WITHOUT OVERLAP
+    # ---------------------------------------------------------
+
     c.setFont("Helvetica", 11)
-    c.drawString(390, y - 75, f"Name: {invoice.get('client_name')}")
-    c.drawString(390, y - 90, f"Email: {invoice.get('client_email')}")
-    c.drawString(390, y - 105, f"Phone: {invoice.get('client_phone')}")
 
-    # ----------- RESPONSIVE MULTILINE ADDRESS (ONLY CHANGE) -----------
-    customer_address = f"Address: {invoice.get('client_address')}"
-    wrap_text(c, customer_address, 390, y - 120, max_width=160)
+    # Start point
+    start_y = y - 75
 
-    # ---------------- TABLE ----------------
-    data = [["Item/Service", "Qty", "Unit Price (Rs.)", "Total (Rs.)"]]
+    wrapped_end_y = wrap_text(
+        c,
+        "Name: " + (invoice.get("client_name") or ""),
+        390,
+        start_y,
+        max_width=160,
+        font="Helvetica",
+        font_size=11
+    )
+
+    # Add spacing after wrapped name
+    email_y = wrapped_end_y - 15
+    phone_y = email_y - 15
+    address_y = phone_y - 20
+
+    # Now email & phone will NEVER overlap
+    c.drawString(390, email_y, f"Email: {invoice.get('client_email')}")
+    c.drawString(390, phone_y, f"Purches-order: {invoice.get('client_po')}")
+
+    # ---------- CUSTOMER ADDRESS WRAPPED ----------
+    wrap_text(
+        c,
+        "Address: " + (invoice.get("client_address") or ""),
+        390,
+        address_y,
+        max_width=160,
+        font="Helvetica",
+        font_size=11
+    )
+
+    # ---------- TABLE ----------
+    from reportlab.platypus import Table, TableStyle
+    data = [["Item/Service", "Qty", "Unit Price", "Total"]]
 
     for item in invoice.get("items", []):
         data.append([
             item.get("item_name", ""),
-            str(item.get("quantity", "")),
+            item.get("quantity", ""),
             f"{item.get('unit_price', 0):.2f}",
             f"{item.get('total', 0):.2f}"
         ])
@@ -756,43 +849,31 @@ def download_invoice_pdf(doc_id):
     table = Table(data, colWidths=[220, 70, 120, 120])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("ALIGN", (1, 1), (-1, -1), "CENTER"),
     ]))
 
-    y_table = y - 160
-    table_height = len(data) * 20
-
-    if y_table - table_height < 100:
-        c.showPage()
-        y_table = height - 100
-
+    y_table = y - 180
     table.wrapOn(c, width, height)
-    table.drawOn(c, 40, y_table - table_height)
+    table.drawOn(c, 40, y_table - len(data) * 20)
 
-    # ---------------- TOTALS ----------------
-    y_tot = y_table - table_height - 40
+    # ---------- TOTALS ----------
+    y_tot = y_table - len(data) * 20 - 40
 
-    c.setFont("Helvetica", 11)
     c.drawRightString(450, y_tot, "Subtotal:")
-    c.drawRightString(550, y_tot, f"Rs.{invoice.get('subtotal', 0):.2f}")
+    c.drawRightString(550, y_tot, f"Rs. {invoice.get('subtotal', 0):.2f}")
 
     c.drawRightString(450, y_tot - 18, "GST:")
-    c.drawRightString(550, y_tot - 18, f"Rs.{invoice.get('gst_amount', 0):.2f}")
+    c.drawRightString(550, y_tot - 18, f"Rs. {invoice.get('gst_amount', 0):.2f}")
 
     c.setFont("Helvetica-Bold", 12)
     c.drawRightString(450, y_tot - 38, "Final Total:")
-    c.drawRightString(550, y_tot - 38, f"Rs.{invoice.get('final_total', 0):.2f}")
+    c.drawRightString(550, y_tot - 38, f"Rs. {invoice.get('final_total', 0):.2f}")
 
-    # ---------------- SIGNATURE ----------------
+    # ---------- SIGNATURE ----------
     c.setFont("Helvetica-Oblique", 11)
     c.drawRightString(550, y_tot - 85, "Signature & Stamp")
     c.drawRightString(550, y_tot - 100, owner_name)
-
-    c.setFont("Helvetica-Oblique", 9)
-    c.drawCentredString(width / 2, 40, "Thank you for your business!")
 
     c.save()
     pdf_buffer.seek(0)
@@ -803,6 +884,7 @@ def download_invoice_pdf(doc_id):
         download_name=f"{invoice.get('invoice_no')}.pdf",
         mimetype="application/pdf"
     )
+
 
 # ------------------------
 # Run App
