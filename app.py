@@ -658,7 +658,6 @@ def delete_department(dep_id):
 
 
 
-
 @app.route("/invoice/<string:doc_id>/download_pdf")
 def download_invoice_pdf(doc_id):
     from reportlab.platypus import Table, TableStyle
@@ -699,7 +698,23 @@ def download_invoice_pdf(doc_id):
     user_id = invoice.get("created_by")
     user = db.collection("users").document(user_id).get().to_dict()
 
-    company_name = user.get("company_name", "")
+    # *************** UPDATED COMPANY NAME ***************
+    selected_departments = invoice.get("departments", [])
+    sub_company_name = None
+
+    dep_docs = db.collection("users").document(user_id).collection("departments").stream()
+    for dep in dep_docs:
+        dep_data = dep.to_dict()
+        if dep_data.get("department_name") in selected_departments:
+            sub_company_name = dep_data.get("sub_company_name")
+            break
+
+    # FIXED: fallback variable was wrong before
+    final_company_name = (
+        sub_company_name if sub_company_name else user.get("company_name", "Company")
+    )
+    # ****************************************************
+
     company_address = user.get("company_address", "")
     company_email = user.get("email", "")
     company_phone = user.get("phone_no", "")
@@ -712,75 +727,43 @@ def download_invoice_pdf(doc_id):
     c = canvas.Canvas(pdf_buffer, pagesize=A4)
     width, height = A4
 
-    # -----------------------------------------------------
-    #  WATERMARK (slightly darker now) — NO DARK BOX
-    # -----------------------------------------------------
+    # ---------- WATERMARK ----------
     if logo_base64:
         try:
             img = ImageReader(io.BytesIO(base64.b64decode(logo_base64)))
-
             c.saveState()
-            c.setFillAlpha(0.06)  # slightly darker than 0.03
-            c.drawImage(
-                img,
-                (width - 280) / 2,
-                (height - 280) / 2,
-                width=280,
-                height=280,
-                mask="auto"
-            )
+            c.setFillAlpha(0.06)
+            c.drawImage(img, (width - 280) / 2, (height - 280) / 2, width=280, height=280, mask="auto")
             c.restoreState()
         except:
             pass
 
-    # -----------------------------------------------------
-    # LOGO ON TOP
-    # -----------------------------------------------------
+    # ---------- LOGO ON TOP ----------
     if logo_base64:
         try:
-            c.drawImage(
-                ImageReader(io.BytesIO(base64.b64decode(logo_base64))),
-                width / 2 - 40,
-                height - 110,
-                width=80,
-                height=80,
-                preserveAspectRatio=True,
-                mask="auto"
-            )
+            c.drawImage(ImageReader(io.BytesIO(base64.b64decode(logo_base64))),
+                        width / 2 - 40, height - 110,
+                        width=80, height=80,
+                        preserveAspectRatio=True, mask="auto")
         except:
             pass
 
-    # ---------- RESPONSIVE COMPANY NAME ----------
+    # ---------- COMPANY NAME ----------
     y_name = height - 145
-    y_name = wrap_text(
-        c,
-        company_name,
-        width / 2,
-        y_name,
-        max_width=350,
-        font="Helvetica-Bold",
-        font_size=18,
-        center=True,
-        line_height=22
-    )
 
-    # ---------- COMPANY ADDRESS WRAP ----------
-    y_name = wrap_text(
-        c,
-        company_address,
-        width / 2,
-        y_name - 15,
-        max_width=380,
-        font="Helvetica",
-        font_size=11,
-        center=True
-    )
+    # FIXED: previously used undefined variable company_name
+    y_name = wrap_text(c, final_company_name, width / 2, y_name,
+                       max_width=350, font="Helvetica-Bold",
+                       font_size=18, center=True, line_height=22)
+
+    # ---------- COMPANY ADDRESS ----------
+    y_name = wrap_text(c, company_address, width / 2, y_name - 15,
+                       max_width=380, font="Helvetica", font_size=11, center=True)
 
     c.drawCentredString(width / 2, y_name - 15, f"Email: {company_email} | Phone: {company_phone}")
 
     # ---------- INVOICE DETAILS ----------
     y = height - 240
-
     c.setFont("Helvetica-Bold", 12)
     c.drawString(60, y, "Invoice Details:")
     c.setFont("Helvetica", 11)
@@ -792,16 +775,7 @@ def download_invoice_pdf(doc_id):
     c.setFont("Helvetica-Bold", 12)
     c.drawString(390, y - 60, "Customer Details:")
 
-    # ---------------------------------------------------------
-    #  ✔ NEW: WRAPPED CLIENT NAME (Fix requested by you)
-    # ---------------------------------------------------------
-    # ---------------------------------------------------------
-    # WRAP CLIENT NAME WITHOUT OVERLAP
-    # ---------------------------------------------------------
-
     c.setFont("Helvetica", 11)
-
-    # Start point
     start_y = y - 75
 
     wrapped_end_y = wrap_text(
@@ -814,16 +788,13 @@ def download_invoice_pdf(doc_id):
         font_size=11
     )
 
-    # Add spacing after wrapped name
     email_y = wrapped_end_y - 15
     phone_y = email_y - 15
     address_y = phone_y - 20
 
-    # Now email & phone will NEVER overlap
     c.drawString(390, email_y, f"Email: {invoice.get('client_email')}")
     c.drawString(390, phone_y, f"Purches-order: {invoice.get('client_po')}")
 
-    # ---------- CUSTOMER ADDRESS WRAPPED ----------
     wrap_text(
         c,
         "Address: " + (invoice.get("client_address") or ""),
@@ -835,7 +806,6 @@ def download_invoice_pdf(doc_id):
     )
 
     # ---------- TABLE ----------
-    from reportlab.platypus import Table, TableStyle
     data = [["Item/Service", "Qty", "Unit Price", "Total"]]
 
     for item in invoice.get("items", []):
@@ -857,7 +827,6 @@ def download_invoice_pdf(doc_id):
     table.wrapOn(c, width, height)
     table.drawOn(c, 40, y_table - len(data) * 20)
 
-    # ---------- TOTALS ----------
     y_tot = y_table - len(data) * 20 - 40
 
     c.drawRightString(450, y_tot, "Subtotal:")
@@ -870,7 +839,6 @@ def download_invoice_pdf(doc_id):
     c.drawRightString(450, y_tot - 38, "Final Total:")
     c.drawRightString(550, y_tot - 38, f"Rs. {invoice.get('final_total', 0):.2f}")
 
-    # ---------- SIGNATURE ----------
     c.setFont("Helvetica-Oblique", 11)
     c.drawRightString(550, y_tot - 85, "Signature & Stamp")
     c.drawRightString(550, y_tot - 100, owner_name)
