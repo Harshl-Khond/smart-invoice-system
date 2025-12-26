@@ -101,10 +101,15 @@
                            class="form-input">
 
                     <input type="text"
-                           name="client_phone"
+                           name="client_po"
                            value="{{ invoice['client_po'] }}"
                            placeholder="Client Purchase Order"
                            class="form-input">
+                     <input type="tel"
+                           name="client_phone"
+                           value="{{ invoice['client_phone'] }}"
+                           placeholder="Client Phone"
+                           class="form-input" maxlength="10">
                 </div>
 
                 <textarea name="client_address"
