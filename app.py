@@ -583,6 +583,7 @@ def edit_invoice(doc_id):
             "client_name": request.form.get("client_name"),
             "client_email": request.form.get("client_email"),
             "client_po": request.form.get("client_po"),
+            "client_phone": request.form.get("client_phone"),
             "client_address": request.form.get("client_address"),
 
             "departments": request.form.getlist("departments"),
