@@ -1,3 +1,4 @@
+import base64
 from flask import Flask, render_template, request, redirect, url_for, send_file, flash,session
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -8,6 +9,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_mail import Mail, Message
 
 # ------------------------
 # Firebase Initialization
@@ -22,12 +24,14 @@ db = firestore.client()
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
+
 # ------------------------
 # Load .env file
 # ------------------------
 load_dotenv()
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")     # e.g. admin@gmail.com
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+
 
 
 
@@ -393,6 +397,7 @@ def create_invoice():
         client_email = request.form.get("client_email")
         client_po = request.form.get("client_po")
         client_address = request.form.get("client_address")
+        client_phone = request.form.get("client_phone")
 
         departments = request.form.getlist("departments")
         taxes = request.form.getlist("taxes")
@@ -423,6 +428,7 @@ def create_invoice():
             "client_name": client_name,
             "client_email": client_email,
             "client_po": client_po,
+            "client_phone": client_phone,
             "client_address": client_address,
             "departments": departments,
             "taxes": taxes,
@@ -658,6 +664,9 @@ def delete_department(dep_id):
 
 
 
+
+
+
 @app.route("/invoice/<string:doc_id>/download_pdf")
 def download_invoice_pdf(doc_id):
     from reportlab.platypus import Table, TableStyle
@@ -790,10 +799,12 @@ def download_invoice_pdf(doc_id):
 
     email_y = wrapped_end_y - 15
     phone_y = email_y - 15
-    address_y = phone_y - 20
-
+    phone_p = phone_y - 15
+    address_y = phone_p - 15
+    
     c.drawString(390, email_y, f"Email: {invoice.get('client_email')}")
-    c.drawString(390, phone_y, f"Purches-order: {invoice.get('client_po')}")
+    c.drawString(390, phone_p, f"Phone: {invoice.get('client_phone')}")
+    c.drawString(390, phone_y, f"Purchase-order: {invoice.get('client_po')}")
 
     wrap_text(
         c,
@@ -853,6 +864,272 @@ def download_invoice_pdf(doc_id):
         mimetype="application/pdf"
     )
 
+
+
+# from sendgrid import SendGridAPIClient
+# from sendgrid.helpers.mail import Mail, Attachment, Content
+# from sendgrid.helpers.mail import Disposition, FileContent, FileName, FileType,Email
+#
+# def send_invoice_email(company_email, to_email, subject, body, pdf_bytes):
+#     """
+#     Send invoice using SendGrid with PDF attachment + branded footer.
+#     Reply-to = company email
+#     """
+#
+#     sendgrid_api_key = os.getenv("SENDGRID_API_KEY")
+#     sender_email = os.getenv("SENDGRID_SENDER")
+#
+#     if not sendgrid_api_key:
+#         raise Exception("SENDGRID_API_KEY missing in .env file")
+#
+#     if not sender_email:
+#         raise Exception("SENDGRID_SENDER missing in .env file")
+#
+#     # Convert PDF to base64
+#     encoded_pdf = base64.b64encode(pdf_bytes).decode()
+#
+#     # Add branding + footer
+#     body = (
+#         body
+#         + "\n\n----------------------------------------\n"
+#         + "🏢 *Powered by KITS Invoice System*\n"
+#         + "----------------------------------------"
+#     )
+#
+#     # Create message
+#     message = Mail(
+#         from_email=Email(sender_email),
+#         to_emails=Email(to_email),
+#         subject=subject,
+#         plain_text_content=body
+#     )
+#
+#     # Set reply-to (dynamic)
+#     message.reply_to = Email(company_email)
+#
+#     # Prepare attachment
+#     attachment = Attachment(
+#         file_content=FileContent(encoded_pdf),
+#         file_type=FileType("application/pdf"),
+#         file_name=FileName("invoice.pdf"),
+#         disposition=Disposition("attachment")
+#     )
+#
+#     # Add attachment
+#     message.add_attachment(attachment)
+#
+#     # Send email
+#     try:
+#         sg = SendGridAPIClient(sendgrid_api_key)
+#         response = sg.send(message)
+#         print("SENDGRID STATUS:", response.status_code)
+#         print(response.body)
+#         print(response.headers)
+#     except Exception as e:
+#         print("SENDGRID ERROR:", e)
+#         raise e
+#
+# @app.route("/send_invoice/<string:doc_id>", methods=["POST"])
+# def send_invoice(doc_id):
+#     from reportlab.platypus import Table, TableStyle
+#     from reportlab.lib import colors
+#     from reportlab.lib.utils import ImageReader
+#     import base64
+#
+#     if "user_id" not in session:
+#         return "Unauthorized", 403
+#
+#     # Fetch invoice
+#     doc_ref = db.collection("invoices").document(doc_id).get()
+#     if not doc_ref.exists:
+#         flash("Invoice not found!", "error")
+#         return redirect(url_for("user_dashboard"))
+#
+#     invoice = doc_ref.to_dict()
+#
+#     # Fetch company user
+#     user_doc = db.collection("users").document(invoice["created_by"]).get()
+#     user = user_doc.to_dict()
+#
+#     # -------------------------------------------
+#     # EMAILS
+#     # -------------------------------------------
+#     company_email = user.get("email")            # reply-to
+#     customer_email = invoice.get("client_email") # receiver
+#
+#     # -------------------------------------------
+#     # START PDF CREATION (Same Format As Download)
+#     # -------------------------------------------
+#
+#     def wrap_text(canvas_obj, text, x, y, max_width, font="Helvetica", font_size=11, line_height=14, center=False):
+#         canvas_obj.setFont(font, font_size)
+#         words = text.split()
+#         line = ""
+#         for word in words:
+#             test = (line + " " + word).strip()
+#             if canvas_obj.stringWidth(test, font, font_size) <= max_width:
+#                 line = test
+#             else:
+#                 if center:
+#                     canvas_obj.drawCentredString(x, y, line)
+#                 else:
+#                     canvas_obj.drawString(x, y, line)
+#                 y -= line_height
+#                 line = word
+#         if line:
+#             if center:
+#                 canvas_obj.drawCentredString(x, y, line)
+#             else:
+#                 canvas_obj.drawString(x, y, line)
+#         return y
+#
+#     # Company info
+#     company_name = user.get("company_name", "")
+#     company_address = user.get("company_address", "")
+#     company_phone = user.get("phone_no", "")
+#     owner_name = user.get("owner_name", "")
+#     company_gst = user.get("company_gst", "")
+#     logo_base64 = user.get("logo_base64")
+#
+#     # Setup PDF
+#     pdf_buffer = io.BytesIO()
+#     c = canvas.Canvas(pdf_buffer, pagesize=A4)
+#     width, height = A4
+#
+#     # Watermark
+#     if logo_base64:
+#         try:
+#             img = ImageReader(io.BytesIO(base64.b64decode(logo_base64)))
+#             c.saveState()
+#             c.setFillAlpha(0.06)
+#             c.drawImage(img, (width - 280) / 2, (height - 280) / 2,
+#                         width=280, height=280, mask="auto")
+#             c.restoreState()
+#         except:
+#             pass
+#
+#     # Logo on top
+#     if logo_base64:
+#         try:
+#             c.drawImage(
+#                 ImageReader(io.BytesIO(base64.b64decode(logo_base64))),
+#                 width / 2 - 40, height - 110,
+#                 width=80, height=80,
+#                 preserveAspectRatio=True,
+#                 mask="auto"
+#             )
+#         except:
+#             pass
+#
+#     # Responsive Company Name
+#     y_name = height - 145
+#     y_name = wrap_text(c, company_name, width / 2, y_name,
+#                        max_width=350, font="Helvetica-Bold", font_size=18,
+#                        center=True, line_height=22)
+#
+#     y_name = wrap_text(
+#         c, company_address, width / 2, y_name - 15,
+#         max_width=380, font="Helvetica", font_size=11, center=True
+#     )
+#
+#     c.drawCentredString(width / 2, y_name - 15,
+#                         f"Email: {company_email} | Phone: {company_phone}")
+#
+#     # Invoice Details
+#     y = height - 240
+#
+#     c.setFont("Helvetica-Bold", 12)
+#     c.drawString(60, y, "Invoice Details:")
+#     c.setFont("Helvetica", 11)
+#     c.drawString(60, y - 20, f"Invoice No: {invoice['invoice_no']}")
+#     c.drawString(60, y - 35, f"Invoice Date: {invoice['invoice_date']}")
+#     c.drawString(60, y - 50, f"Due Date: {invoice['due_date']}")
+#     c.drawString(60, y - 65, f"GSTIN: {company_gst}")
+#
+#     # Customer Details
+#     c.setFont("Helvetica-Bold", 12)
+#     c.drawString(390, y - 60, "Customer Details:")
+#     c.setFont("Helvetica", 11)
+#
+#     start_y = y - 75
+#     wrapped_end_y = wrap_text(
+#         c, "Name: " + (invoice.get("client_name") or ""),
+#         390, start_y, max_width=160
+#     )
+#
+#     email_y = wrapped_end_y - 15
+#     phone_y = email_y - 15
+#     addr_y = phone_y - 20
+#
+#     c.drawString(390, email_y, f"Email: {invoice.get('client_email')}")
+#     c.drawString(390, phone_y, f"Purches-order: {invoice.get('client_po')}")
+#
+#     wrap_text(
+#         c, "Address: " + (invoice.get("client_address") or ""),
+#         390, addr_y, max_width=160
+#     )
+#
+#     # Table
+#     data = [["Item/Service", "Qty", "Unit Price", "Total"]]
+#     for item in invoice["items"]:
+#         data.append([
+#             item.get("item_name", ""),
+#             item.get("quantity", ""),
+#             f"{item.get('unit_price', 0):.2f}",
+#             f"{item.get('total', 0):.2f}"
+#         ])
+#
+#     table = Table(data, colWidths=[220, 70, 120, 120])
+#     table.setStyle(TableStyle([
+#         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+#         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+#         ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+#     ]))
+#
+#     y_table = y - 180
+#     table.wrapOn(c, width, height)
+#     table.drawOn(c, 40, y_table - len(data) * 20)
+#
+#     # Totals
+#     y_tot = y_table - len(data) * 20 - 40
+#     c.drawRightString(450, y_tot, "Subtotal:")
+#     c.drawRightString(550, y_tot, f"Rs. {invoice['subtotal']:.2f}")
+#
+#     c.drawRightString(450, y_tot - 18, "GST:")
+#     c.drawRightString(550, y_tot - 18, f"Rs. {invoice['gst_amount']:.2f}")
+#
+#     c.setFont("Helvetica-Bold", 12)
+#     c.drawRightString(450, y_tot - 38, "Final Total:")
+#     c.drawRightString(550, y_tot - 38, f"Rs. {invoice['final_total']:.2f}")
+#
+#     # Signature
+#     c.setFont("Helvetica-Oblique", 11)
+#     c.drawRightString(550, y_tot - 85, "Signature & Stamp")
+#     c.drawRightString(550, y_tot - 100, owner_name)
+#
+#     c.save()
+#     pdf_buffer.seek(0)
+#     pdf_bytes = pdf_buffer.getvalue()
+#
+#     # --------------------------------------------------
+#     # SEND USING SENDGRID (Your working function)
+#     # --------------------------------------------------
+#     try:
+#         send_invoice_email(
+#             company_email,      # reply-to
+#             customer_email,     # receiver
+#             f"Invoice #{invoice['invoice_no']}",
+#             "Dear Customer,\n\nYour invoice is attached.\n\nThank you!",
+#             pdf_bytes
+#         )
+#         flash("Invoice sent successfully using SendGrid!", "success")
+#
+#     except Exception as e:
+#         flash(f"Failed to send email: {str(e)}", "error")
+#
+#     return redirect(url_for("user_dashboard"))
+#
+#
 
 # ------------------------
 # Run App
